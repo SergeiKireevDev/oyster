@@ -87,7 +87,7 @@ export async function refreshAnthropicOAuthGrant(refreshToken, { fetchImpl = fet
     throw refreshError(`Anthropic token refresh request failed: ${cause?.message ?? cause}`, { cause });
   }
   const text = await response.text();
-  let payload = null;
+  let payload;
   try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
   if (!response.ok) {
     const code = plainObject(payload) && typeof payload.error === "string" ? payload.error : "";

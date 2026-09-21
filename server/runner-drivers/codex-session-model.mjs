@@ -16,6 +16,21 @@ function findRollout(directory, sessionId) {
   return null;
 }
 
+function codexSessionMetadataFromRecord(record) {
+  const provider = record.type === "session_meta" && typeof record.payload?.model_provider === "string"
+    ? record.payload.model_provider.trim()
+    : "";
+  const model = record.type === "turn_context" && typeof record.payload?.model === "string"
+    ? record.payload.model.trim()
+    : "";
+  return { provider, model };
+}
+
+function parseCodexRolloutLine(line) {
+  try { return codexSessionMetadataFromRecord(JSON.parse(line)); }
+  catch { return null; }
+}
+
 // exec --json omits the model; Codex records the resolved model in each
 // rollout's turn_context. Read only appended bytes, including partial writes.
 export function createCodexSessionStateReader(home, sessionId) {
@@ -42,11 +57,9 @@ export function createCodexSessionStateReader(home, sessionId) {
         while ((end = pending.indexOf("\n")) !== -1) {
           const line = pending.slice(0, end);
           pending = pending.slice(end + 1);
-          try {
-            const record = JSON.parse(line);
-            if (record.type === "session_meta" && typeof record.payload?.model_provider === "string" && record.payload.model_provider.trim()) provider = record.payload.model_provider;
-            if (record.type === "turn_context" && typeof record.payload?.model === "string" && record.payload.model.trim()) model = record.payload.model;
-          } catch { /* Ignore malformed records without losing later context. */ }
+          const metadata = parseCodexRolloutLine(line);
+          if (metadata?.provider) provider = metadata.provider;
+          if (metadata?.model) model = metadata.model;
         }
       }
     } catch { /* Metadata may not exist yet; never interrupt the turn. */ }

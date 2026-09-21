@@ -124,6 +124,7 @@ export function resolveConfiguredPiSdk(piBin) {
  * Load credential primitives only from the installation owning PI_BIN.
  * No package-name import is used, preventing fallback to another global pi.
  */
+// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
 export function createPiCredentialService({
   config,
   importSdk = (url) => import(url),
@@ -746,6 +747,7 @@ export function createPiCredentialService({
     const providerId = normalizedProvider(provider);
     const harnessId = normalizedHarness(harness);
     const safeCallbacks = normalizedOAuthCallbacks(callbacks);
+    // eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     return withProviderReservation(providerId, harnessId, async () => {
       if (harnessId === "gemini") {
         if (providerId !== GEMINI_CLI) throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support OAuth for Gemini CLI`);
@@ -829,6 +831,7 @@ export function createPiCredentialService({
   async function logoutOAuth(provider, { harness = "pi" } = {}) {
     const providerId = normalizedProvider(provider);
     const harnessId = normalizedHarness(harness);
+    // eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     return withProviderReservation(providerId, harnessId, async () => {
       if (harnessId === "gemini") {
         if (providerId !== GEMINI_CLI) throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support OAuth for Gemini CLI`);

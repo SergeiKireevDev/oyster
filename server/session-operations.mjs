@@ -93,28 +93,29 @@ export function createSessionOperations({
       throw capabilityError("configured pi returned an invalid SQLite fork session");
     }
     let operationError;
+    let result;
     try {
       if (typeof fork.getMetadata !== "function") {
         throw capabilityError("configured pi returned an invalid SQLite fork session");
       }
       const metadata = await fork.getMetadata();
-      return {
+      result = {
         id: metadata.id,
         sessionRef: sessionReferences.validate({ backend: "sqlite", id: metadata.id, storagePath: reference.storagePath }),
       };
     } catch (error) {
       operationError = error;
-      throw error;
-    } finally {
-      try {
-        await fork.close();
-      } catch (closeError) {
-        if (!operationError) throw closeError;
-        throw new AggregateError([operationError, closeError], "SQLite fork operation and cleanup both failed", {
-          cause: operationError,
-        });
-      }
     }
+    try {
+      await fork.close();
+    } catch (closeError) {
+      if (!operationError) throw closeError;
+      throw new AggregateError([operationError, closeError], "SQLite fork operation and cleanup both failed", {
+        cause: operationError,
+      });
+    }
+    if (operationError) throw operationError;
+    return result;
   }
 
   return Object.freeze({

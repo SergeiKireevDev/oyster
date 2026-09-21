@@ -431,6 +431,7 @@ export function createRunnerRoutes({
       });
     },
 
+    // eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     "POST /open-session": async (req, res) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;

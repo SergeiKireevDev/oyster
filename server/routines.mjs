@@ -227,6 +227,7 @@ async function runScript(state, definition, mode) {
   await emit(state, definition, mode === "run" ? "started" : "teardown_started");
 }
 
+// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
 export async function createRoutine(state, { name, script, sessionId = null, ownerId = null, cwd = null }) {
   if (typeof name !== "string" || !/^[A-Za-z0-9][\w.-]*$/.test(name)) throw new Error(`invalid routine name: ${name}`);
   if (typeof script !== "string") throw new Error("routine script must be a string");

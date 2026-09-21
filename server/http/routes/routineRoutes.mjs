@@ -50,6 +50,7 @@ export function createRoutineRoutes({ state, requestContext, routines, ensureSes
       json(res, 200, { routines: await listRoutines(state), dir: routinesDir() });
     },
 
+    // eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     "POST /routines": async (req, res) => {
       disableCaching(res);
       const body = await readJsonBody(req, res);

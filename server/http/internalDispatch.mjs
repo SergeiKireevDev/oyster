@@ -65,7 +65,7 @@ export function dispatchRoute(routeTable, method, path, body = undefined, { sign
       settled = true;
       signal?.removeEventListener("abort", onAbort);
       const raw = Buffer.concat(chunks).toString("utf8");
-      let data = null;
+      let data;
       try { data = raw ? JSON.parse(raw) : null; } catch { data = { error: raw }; }
       resolve({ status: res.statusCode, data });
       res.emit("finish");

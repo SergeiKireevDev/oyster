@@ -174,7 +174,7 @@ export async function listTunnels(state, filters = {}) {
 
 /** Allocate durable identity and recovery configuration before any process starts. */
 export async function reserveHublot(state, {
-  port, label = null, sessionId = null, ownerId = null,
+  port, label = null, ownerId = null,
 } = {}) {
   port = Number(port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`invalid port: ${port}`);
@@ -254,151 +254,153 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
   waitForPublic = waitForPublicHublot,
   emitOpenedEvent = true,
 } = {}) {
-  return new Promise(async (resolvePromise, reject) => {
-    port = Number(port);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      reject(new Error(`invalid port: ${port}`));
-      return;
-    }
-    const reservation = id ? await hublotRepository(state).find(id) : null;
-    if (!reservation || !["opening", "recovering"].includes(reservation.status) || reservation.port !== port) {
-      reject(new Error("hublot must be durably reserved or recovering before opening its tunnel"));
-      return;
-    }
+  return new Promise((resolvePromise, reject) => {
+    (async () => {
+      port = Number(port);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        reject(new Error(`invalid port: ${port}`));
+        return;
+      }
+      const reservation = id ? await hublotRepository(state).find(id) : null;
+      if (!reservation || !["opening", "recovering"].includes(reservation.status) || reservation.port !== port) {
+        reject(new Error("hublot must be durably reserved or recovering before opening its tunnel"));
+        return;
+      }
 
-    const bin = state.config.TUNNEL_BIN;
-    // --protocol http2: QUIC (UDP 7844) is blocked on many networks, which
-    // makes cloudflared print a URL that never actually registers (error 1033)
-    const args = ["tunnel", "--url", `http://127.0.0.1:${port}`, "--no-autoupdate", "--protocol", "http2"];
-    console.log(`[oyster] spawning tunnel: ${bin} ${args.join(" ")}`);
-    let proc;
-    try {
-      proc = spawnProcess(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
-    } catch (error) {
-      const failure = new Error(`tunnel spawn failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
-      await failOpeningHublot(state, id, failure);
-      reject(failure);
-      return;
-    }
-    let tunnelProcess;
-    try {
-      tunnelProcess = await persistHublotProcessIdentity(state, { hublotId: id, role: "tunnel", pid: proc.pid });
-      if (!tunnelProcess) throw new Error("tunnel started without a persistent process identity");
-      registerHublotProcessHandle(state, tunnelProcess, proc);
-    } catch (error) {
-      proc.once?.("error", () => {});
-      if (proc.exitCode === null && !proc.killed) proc.kill("SIGTERM");
-      const failure = new Error(`could not persist tunnel process identity: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
-      await failOpeningHublot(state, id, failure);
-      reject(failure);
-      return;
-    }
+      const bin = state.config.TUNNEL_BIN;
+      // --protocol http2: QUIC (UDP 7844) is blocked on many networks, which
+      // makes cloudflared print a URL that never actually registers (error 1033)
+      const args = ["tunnel", "--url", `http://127.0.0.1:${port}`, "--no-autoupdate", "--protocol", "http2"];
+      console.log(`[oyster] spawning tunnel: ${bin} ${args.join(" ")}`);
+      let proc;
+      try {
+        proc = spawnProcess(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+      } catch (error) {
+        const failure = new Error(`tunnel spawn failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+        await failOpeningHublot(state, id, failure);
+        reject(failure);
+        return;
+      }
+      let tunnelProcess;
+      try {
+        tunnelProcess = await persistHublotProcessIdentity(state, { hublotId: id, role: "tunnel", pid: proc.pid });
+        if (!tunnelProcess) throw new Error("tunnel started without a persistent process identity");
+        registerHublotProcessHandle(state, tunnelProcess, proc);
+      } catch (error) {
+        proc.once?.("error", () => {});
+        if (proc.exitCode === null && !proc.killed) proc.kill("SIGTERM");
+        const failure = new Error(`could not persist tunnel process identity: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+        await failOpeningHublot(state, id, failure);
+        reject(failure);
+        return;
+      }
 
-    const tunnel = {
-      id, port, label, sessionId, url: null,
-      workdir: reservation.workdir, createdAt: reservation.created_at, proc,
-    };
+      const tunnel = {
+        id, port, label, sessionId, url: null,
+        workdir: reservation.workdir, createdAt: reservation.created_at, proc,
+      };
 
-    let settled = false;
-    let checkingPublicUrl = false;
-    const timer = setTimeout(async () => {
-      if (settled) return;
-      settled = true;
-      proc.kill("SIGTERM");
-      const error = new Error(`tunnel did not report a URL within ${URL_TIMEOUT_MS / 1000}s`);
-      await failOpeningHublot(state, id, error);
-      reject(error);
-    }, URL_TIMEOUT_MS);
+      let settled = false;
+      let checkingPublicUrl = false;
+      const timer = setTimeout(async () => {
+        if (settled) return;
+        settled = true;
+        proc.kill("SIGTERM");
+        const error = new Error(`tunnel did not report a URL within ${URL_TIMEOUT_MS / 1000}s`);
+        await failOpeningHublot(state, id, error);
+        reject(error);
+      }, URL_TIMEOUT_MS);
 
-    // cloudflared prints the assigned URL on stderr
-    let errTail = "";
-    const onOutput = async (chunk) => {
-      const text = String(chunk);
-      errTail = (errTail + text).slice(-2000);
-      // Stream chunks can split the assigned URL at any byte boundary.
-      const m = errTail.match(PUBLIC_URL_RE);
-      if (m && !settled && !checkingPublicUrl) {
-        checkingPublicUrl = true;
+      // cloudflared prints the assigned URL on stderr
+      let errTail = "";
+      const onOutput = async (chunk) => {
+        const text = String(chunk);
+        errTail = (errTail + text).slice(-2000);
+        // Stream chunks can split the assigned URL at any byte boundary.
+        const m = errTail.match(PUBLIC_URL_RE);
+        if (m && !settled && !checkingPublicUrl) {
+          checkingPublicUrl = true;
+          clearTimeout(timer);
+          if (!await confirmSpawnedTunnelProcess(state, tunnelProcess, proc)) {
+            settled = true;
+            if (proc.exitCode === null && !proc.killed) proc.kill("SIGTERM");
+            const error = new Error("tunnel reported a URL before its persisted process identity could be confirmed healthy");
+            await failOpeningHublot(state, id, error);
+            reject(error);
+            return;
+          }
+          tunnel.url = m[0];
+          console.log(`[oyster] tunnel URL assigned; waiting for public readiness: ${tunnel.url}`);
+          const confirmPublicReadiness = state.config.SKIP_PUBLIC_HUBLOT_READINESS
+            ? async () => true
+            : waitForPublic;
+          void confirmPublicReadiness(tunnel.url).then(async () => {
+            if (settled) return;
+            settled = true;
+            const openedAt = new Date().toISOString();
+            const row = await recordHublotTransition(state, id, "open", {
+              desiredState: "open", publicUrl: tunnel.url, lastError: null, openedAt, at: openedAt,
+            });
+            console.log(`[oyster] tunnel ready: ${tunnel.url} -> localhost:${port}`);
+            const info = await persistedTunnelInfo(state, row);
+            if (emitOpenedEvent) state.serverEvent({ type: "tunnel_opened", tunnel: info });
+            resolvePromise(info);
+          }).catch(async (error) => {
+            if (settled) return;
+            settled = true;
+            if (proc.exitCode === null && !proc.killed) proc.kill("SIGTERM");
+            await failOpeningHublot(state, id, error);
+            reject(error);
+          });
+        }
+      };
+      proc.stderr.on("data", onOutput);
+      proc.stdout.on("data", onOutput);
+
+      proc.on("error", async (err) => {
+        removeHublotProcessHandle(state, tunnelProcess, proc);
+        await finishPersistedProcess(state, tunnelProcess, { status: "failed" });
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
-        if (!await confirmSpawnedTunnelProcess(state, tunnelProcess, proc)) {
+        const error = new Error(
+          err.code === "ENOENT"
+            ? `tunnel binary "${bin}" not found — install cloudflared or set --tunnel-bin / TUNNEL_BIN`
+            : `tunnel spawn failed: ${err.message}`
+        );
+        await failOpeningHublot(state, id, error);
+        reject(error);
+      });
+
+      proc.on("exit", async (code, signal) => {
+        removeHublotProcessHandle(state, tunnelProcess, proc);
+        await finishPersistedProcess(state, tunnelProcess, { exitCode: code, signal });
+        if (!settled) {
           settled = true;
-          if (proc.exitCode === null && !proc.killed) proc.kill("SIGTERM");
-          const error = new Error("tunnel reported a URL before its persisted process identity could be confirmed healthy");
+          clearTimeout(timer);
+          const error = new Error(`tunnel exited before reporting a URL (code=${code}): ${errTail.trim().split("\n").pop() ?? ""}`);
           await failOpeningHublot(state, id, error);
           reject(error);
           return;
         }
-        tunnel.url = m[0];
-        console.log(`[oyster] tunnel URL assigned; waiting for public readiness: ${tunnel.url}`);
-        const confirmPublicReadiness = state.config.SKIP_PUBLIC_HUBLOT_READINESS
-          ? async () => true
-          : waitForPublic;
-        void confirmPublicReadiness(tunnel.url).then(async () => {
-          if (settled) return;
-          settled = true;
-          const openedAt = new Date().toISOString();
-          const row = await recordHublotTransition(state, id, "open", {
-            desiredState: "open", publicUrl: tunnel.url, lastError: null, openedAt, at: openedAt,
+        const current = await hublotRepository(state).find(tunnel.id);
+        const latestTunnel = (await hublotRepository(state).listProcesses(tunnel.id))
+          .filter((row) => row.role === "tunnel").at(-1);
+        if (current && !state.hublotReopens?.has(tunnel.id) && latestTunnel?.id === tunnelProcess?.id && current.status !== "failed" && current.status !== "closed") {
+          const manuallyClosed = current.desired_state === "closed";
+          const closedAt = new Date().toISOString();
+          await recordHublotTransition(state, tunnel.id, manuallyClosed ? "closed" : "interrupted", {
+            desiredState: current.desired_state, publicUrl: null, closedAt,
+            lastError: manuallyClosed ? null : `tunnel exited (code=${code}, signal=${signal})`, at: closedAt,
           });
-          console.log(`[oyster] tunnel ready: ${tunnel.url} -> localhost:${port}`);
-          const info = await persistedTunnelInfo(state, row);
-          if (emitOpenedEvent) state.serverEvent({ type: "tunnel_opened", tunnel: info });
-          resolvePromise(info);
-        }).catch(async (error) => {
-          if (settled) return;
-          settled = true;
-          if (proc.exitCode === null && !proc.killed) proc.kill("SIGTERM");
-          await failOpeningHublot(state, id, error);
-          reject(error);
-        });
-      }
-    };
-    proc.stderr.on("data", onOutput);
-    proc.stdout.on("data", onOutput);
-
-    proc.on("error", async (err) => {
-      removeHublotProcessHandle(state, tunnelProcess, proc);
-      await finishPersistedProcess(state, tunnelProcess, { status: "failed" });
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      const error = new Error(
-        err.code === "ENOENT"
-          ? `tunnel binary "${bin}" not found — install cloudflared or set --tunnel-bin / TUNNEL_BIN`
-          : `tunnel spawn failed: ${err.message}`
-      );
-      await failOpeningHublot(state, id, error);
-      reject(error);
-    });
-
-    proc.on("exit", async (code, signal) => {
-      removeHublotProcessHandle(state, tunnelProcess, proc);
-      await finishPersistedProcess(state, tunnelProcess, { exitCode: code, signal });
-      if (!settled) {
-        settled = true;
-        clearTimeout(timer);
-        const error = new Error(`tunnel exited before reporting a URL (code=${code}): ${errTail.trim().split("\n").pop() ?? ""}`);
-        await failOpeningHublot(state, id, error);
-        reject(error);
-        return;
-      }
-      const current = await hublotRepository(state).find(tunnel.id);
-      const latestTunnel = (await hublotRepository(state).listProcesses(tunnel.id))
-        .filter((row) => row.role === "tunnel").at(-1);
-      if (current && !state.hublotReopens?.has(tunnel.id) && latestTunnel?.id === tunnelProcess?.id && current.status !== "failed" && current.status !== "closed") {
-        const manuallyClosed = current.desired_state === "closed";
-        const closedAt = new Date().toISOString();
-        await recordHublotTransition(state, tunnel.id, manuallyClosed ? "closed" : "interrupted", {
-          desiredState: current.desired_state, publicUrl: null, closedAt,
-          lastError: manuallyClosed ? null : `tunnel exited (code=${code}, signal=${signal})`, at: closedAt,
-        });
-        console.log(`[oyster] tunnel closed: ${tunnel.url} (code=${code}, signal=${signal})`);
-        const latest = await hublotRepository(state).find(tunnel.id);
-        if (latest) {
-          state.serverEvent({ type: "tunnel_closed", tunnel: await persistedTunnelInfo(state, latest) });
+          console.log(`[oyster] tunnel closed: ${tunnel.url} (code=${code}, signal=${signal})`);
+          const latest = await hublotRepository(state).find(tunnel.id);
+          if (latest) {
+            state.serverEvent({ type: "tunnel_closed", tunnel: await persistedTunnelInfo(state, latest) });
+          }
         }
-      }
-    });
+      });
+    })().catch(reject);
   });
 }
 

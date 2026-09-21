@@ -122,6 +122,7 @@ function endTool(runtime, events, { id, name, text, isError, at }) {
   events.push({ type: "message_end", message });
 }
 
+// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
 function codexTool(item) {
   const { id, type, status, ...details } = item;
   if (!id || typeof type !== "string") return null;
@@ -139,6 +140,7 @@ function codexTool(item) {
   return { id, name, args, text, isError: ["failed", "declined"].includes(status) || Boolean(item.error), provider: "openai", api: "codex", model: undefined };
 }
 
+// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
 function decodeCodex(runtime, record) {
   const events = [];
   if (record.type === "oyster.bridge.session_model" && typeof record.model === "string" && record.model.trim()) {
@@ -228,6 +230,7 @@ function ampAssistant(runtime, record) {
   });
 }
 
+// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
 function decodeAmp(runtime, record) {
   const events = [];
   if (record.type === "system" && record.subtype === "init") {
@@ -336,6 +339,7 @@ export function createHeadlessDriver({
       return { process: childProcess, description: `${label ?? id} bridge (${executable})` };
     },
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     decodeLine(runner, line) {
       let record;
       try { record = JSON.parse(String(line)); } catch { return []; }
@@ -391,6 +395,7 @@ export function createHeadlessDriver({
       return events;
     },
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     sendCommand(runner, child, command) {
       const runtime = runtimeFor(runner, { model: defaultModel });
       const emit = (event) => queueMicrotask(() => runner.driverEmit?.(event));

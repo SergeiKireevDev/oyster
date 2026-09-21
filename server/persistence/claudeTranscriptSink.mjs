@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { claudeRecordsToSessionEntries, parseClaudeJsonl } from "../runner-drivers/claude-transcript.mjs";
 
@@ -92,7 +92,7 @@ export function createClaudeTranscriptSink({
     if (!path) return { found: false, changed: false, sessionId: id, sourcePath: null, reference: null };
     const entries = claudeRecordsToSessionEntries(parseClaudeJsonl(await readFileImpl(path, "utf8")));
     const repo = await repository();
-    let session = null;
+    let session;
     let created = false;
     try {
       session = await repo.openById(id);
@@ -111,7 +111,6 @@ export function createClaudeTranscriptSink({
     }
     if (!prefixMatches) {
       await session.close();
-      session = null;
       await repo.deleteById(id);
       session = await repo.create({ cwd: workdir, id, metadata: { harness: "claude-code", externalSessionId: id, importedFrom: path } });
       existing = [];
@@ -127,7 +126,6 @@ export function createClaudeTranscriptSink({
       appended++;
     }
     await session.close();
-    session = null;
     return {
       found: true,
       changed: created || appended > 0,

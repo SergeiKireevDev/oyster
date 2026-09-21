@@ -72,6 +72,7 @@ export async function importLegacyAppData({
           conflicts,
         };
       },
+      // eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
       routines: async () => {
         const conflicts = [];
         const candidates = [];

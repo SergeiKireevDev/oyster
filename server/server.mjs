@@ -122,6 +122,7 @@ function detectExecutable(value) {
   catch { return null; }
 }
 
+// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
 function validateConfig(config) {
   const currentNode = process.versions.node.split(".").map(Number);
   const supportedNode = MIN_NODE_VERSION.every((part, index) =>

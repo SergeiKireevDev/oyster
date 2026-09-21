@@ -30,6 +30,7 @@ function response(id, command, data, success = true, error = undefined) {
   return { type: "response", id, command, success, ...(success ? { data } : { error: error ?? `${command} is unsupported` }) };
 }
 
+// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
 function availableModels(records, currentModel = null, provider = "anthropic") {
   const models = [];
   const seen = new Set();
@@ -137,6 +138,7 @@ export function createClaudeCodeDriver({
       return { process, description: `${executable} ${args.join(" ")}` };
     },
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     decodeLine(runner, line) {
       let record;
       try { record = JSON.parse(String(line)); } catch { return []; }
@@ -209,6 +211,7 @@ export function createClaudeCodeDriver({
       return events;
     },
 
+    // eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
     sendCommand(runner, child, command) {
       const runtime = ensureRuntime(runner);
       const emit = (event) => queueMicrotask(() => runner.driverEmit?.(event));

@@ -123,6 +123,7 @@ function ensureRunnerRuntimeFields(runner) {
   return runner;
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
 export async function createRunnerManager(state, {
   ensureSessionOwner = () => null, createRunnerId = randomUUID,
   appStore = undefined, now = () => new Date().toISOString(),
@@ -417,6 +418,7 @@ export async function createRunnerManager(state, {
   }
 
   /** Apply a canonical driver event to runner lifecycle and session metadata. */
+  // eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
   async function trackRunner(runner, msg) {
     if (!msg || typeof msg !== "object" || Array.isArray(msg)) return;
     try { notifyRunnerEvent(runner, msg); }

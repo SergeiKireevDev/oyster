@@ -39,6 +39,7 @@ function snippet(text, index, length, context = 70) {
   };
 }
 
+// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
 function searchableParts(entry) {
   if (entry.type === "session_info" && typeof entry.name === "string" && entry.name) {
     return [{ role: "meta", kind: "name", text: entry.name }];
@@ -119,16 +120,17 @@ export function createSqliteSessionCatalog({
   async function withDatabase(operation, missingValue) {
     if (!existsSync(storagePath)) return missingValue;
     const database = normalizeDatabase(await databaseFactory(storagePath));
+    let result;
     let operationError = null;
     try {
-      return await operation(database);
+      result = await operation(database);
     } catch (error) {
       operationError = error;
-      throw error;
-    } finally {
-      try { await closeAsyncDatabase(database); }
-      catch (closeError) { if (!operationError) throw closeError; }
     }
+    try { await closeAsyncDatabase(database); }
+    catch (closeError) { if (!operationError) throw closeError; }
+    if (operationError) throw operationError;
+    return result;
   }
 
   const summarySelect = `SELECT s.id, s.created_at, s.cwd, s.parent_session_id, s.active_leaf_id,

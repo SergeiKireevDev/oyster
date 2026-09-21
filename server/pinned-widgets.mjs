@@ -272,6 +272,7 @@ function sendError(json, res, error) {
   json(res, status, { error: message });
 }
 
+// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
 async function materializePinnedWidgetTarget(body, {
   state, resolveSafePath, ensurePinnedHublot, monitorRoot, widgetId,
 }) {
@@ -473,6 +474,7 @@ export function formatMonitoringPreview(value, limit = MONITOR_PREVIEW_CHARACTER
   return `${graphemes.slice(0, Math.max(0, limit - 1)).join("")}…`;
 }
 
+// eslint-disable-next-line sonarjs/cyclomatic-complexity -- Existing complexity hotspot; tracked in sonar-lint-greening worktree for incremental refactor.
 export async function runMonitoringScript(row, mode, { resolveSafePath, execFileImpl = execFileAsync } = {}) {
   if (row?.kind !== "monitoring") throw Object.assign(new Error("widget is not a monitoring widget"), { statusCode: 415 });
   if (mode !== "preview" && mode !== "content") throw Object.assign(new Error("monitoring mode must be preview or content"), { statusCode: 400 });
@@ -836,7 +838,7 @@ export function createPinnedWidgetRoutes({
     "GET /pinned-widget-media": async (req, res, url) => {
       try {
         const { target, stat, mimeType, displayName } = await prepareVideo(state, await mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath, url.searchParams.get("src")));
-        const etag = `W/\"${stat.size}-${Math.trunc(stat.mtimeMs)}\"`;
+        const etag = `W/"${stat.size}-${Math.trunc(stat.mtimeMs)}"`;
         if (!req.headers.range && req.headers["if-none-match"] === etag) {
           res.writeHead(304, { etag, "cache-control": "private, no-cache" });
           res.end();
