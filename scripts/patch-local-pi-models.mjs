@@ -3,7 +3,7 @@
  * Compatibility patch for the pinned pi generator after models.dev renamed
  * kimi-for-coding to regional catalog keys. Keep the existing api.kimi.com
  * endpoint paired with the CN catalog; do not silently switch credential regions.
- * Applied only inside the Docker build, never to the source submodule checkout.
+ * Applied before bundled pi builds and inside Docker build copies.
  * Remove once the pinned pi generator supports the renamed provider natively.
  */
 import { readFileSync, writeFileSync } from "node:fs";
