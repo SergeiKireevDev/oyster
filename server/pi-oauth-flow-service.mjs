@@ -40,6 +40,22 @@ function safeFailureCode(error) {
   return SAFE_FAILURE_CODES.has(error?.code) ? error.code : "oauth_failed";
 }
 
+function requireSafeIntegerRange(value, min, max, message) {
+  if (!Number.isSafeInteger(value) || value < min || value > max) throw new TypeError(message);
+}
+
+function validateOAuthFlowDependencies({ registry, credentialService, restartActiveRunners, randomBytes, now, maxActiveFlows, inactivityMs, terminalRetentionMs, setTimer, clearTimer }) {
+  if (!(registry instanceof Map)) throw new TypeError("host-owned OAuth flow registry must be a Map");
+  if (!credentialService || typeof credentialService.loginOAuth !== "function") throw new TypeError("credentialService.loginOAuth is required");
+  for (const [fn, label] of [[restartActiveRunners, "restartActiveRunners"], [randomBytes, "randomBytes"], [now, "now"]]) {
+    if (typeof fn !== "function") throw new TypeError(`${label} is required`);
+  }
+  requireSafeIntegerRange(maxActiveFlows, 1, 32, "maxActiveFlows must be an integer from 1 to 32");
+  requireSafeIntegerRange(inactivityMs, 1000, 60 * 60 * 1000, "inactivityMs must be an integer from 1000 to 3600000");
+  requireSafeIntegerRange(terminalRetentionMs, 0, 60 * 60 * 1000, "terminalRetentionMs must be an integer from 0 to 3600000");
+  if (typeof setTimer !== "function" || typeof clearTimer !== "function") throw new TypeError("timer functions are required");
+}
+
 /**
  * Coordinates OAuth promises while all mutable flow records remain owned by
  * the stable server state supplied as `registry`.
@@ -56,23 +72,7 @@ export function createPiOAuthFlowService({
   setTimer = setTimeout,
   clearTimer = clearTimeout,
 } = {}) {
-  if (!(registry instanceof Map)) throw new TypeError("host-owned OAuth flow registry must be a Map");
-  if (!credentialService || typeof credentialService.loginOAuth !== "function") {
-    throw new TypeError("credentialService.loginOAuth is required");
-  }
-  if (typeof restartActiveRunners !== "function") throw new TypeError("restartActiveRunners is required");
-  if (typeof randomBytes !== "function") throw new TypeError("randomBytes is required");
-  if (typeof now !== "function") throw new TypeError("now is required");
-  if (!Number.isSafeInteger(maxActiveFlows) || maxActiveFlows < 1 || maxActiveFlows > 32) {
-    throw new TypeError("maxActiveFlows must be an integer from 1 to 32");
-  }
-  if (!Number.isSafeInteger(inactivityMs) || inactivityMs < 1000 || inactivityMs > 60 * 60 * 1000) {
-    throw new TypeError("inactivityMs must be an integer from 1000 to 3600000");
-  }
-  if (!Number.isSafeInteger(terminalRetentionMs) || terminalRetentionMs < 0 || terminalRetentionMs > 60 * 60 * 1000) {
-    throw new TypeError("terminalRetentionMs must be an integer from 0 to 3600000");
-  }
-  if (typeof setTimer !== "function" || typeof clearTimer !== "function") throw new TypeError("timer functions are required");
+  validateOAuthFlowDependencies({ registry, credentialService, restartActiveRunners, randomBytes, now, maxActiveFlows, inactivityMs, terminalRetentionMs, setTimer, clearTimer });
 
   function boundedText(value, label, limit = MAX_TEXT_LENGTH, { optional = false } = {}) {
     if (value === undefined && optional) return undefined;

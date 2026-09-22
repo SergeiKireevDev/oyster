@@ -102,7 +102,7 @@ test("catalog and constructed-dependency contracts fail before a candidate is us
 test("application completes preflight and route-table validation before process-facing scheduling", () => {
   const source = readFileSync(new URL("../server/app.mjs", import.meta.url), "utf8");
   const repositories = source.indexOf("validateRepositoryAvailability(appStore)");
-  const catalogAccess = source.indexOf("validateCatalogAccess(state.sessionCatalog");
+  const catalogAccess = source.indexOf("await initializeSessionCatalog(state");
   const dependencies = source.indexOf("validateDependencyConstruction({");
   const routes = source.indexOf("const routeTable = createRouteTable({");
   const scheduling = source.indexOf("scheduleHublotStartupReconciliation({ state");

@@ -214,6 +214,22 @@ function geminiAssistantDelta(runtime, record, provider, api) {
   return events;
 }
 
+function geminiToolEvent(runtime, record, provider, api) {
+  const events = [];
+  if (record.type === "tool_use") startTool(runtime, events, { id: String(record.tool_id ?? "tool"), name: String(record.tool_name ?? "tool"), args: record.parameters, provider, api, model: runtime.model, at: record.timestamp });
+  else endTool(runtime, events, { id: String(record.tool_id ?? "tool"), text: record.output ?? record.error?.message, isError: record.status === "error", at: record.timestamp });
+  return events;
+}
+
+function geminiResult(runtime, record) {
+  const events = [];
+  finishStreamingMessage(runtime, events, record.status === "error" ? "error" : "stop");
+  runtime.streaming = false;
+  if (record.status === "error") events.push({ type: "pi_error", error: String(record.error?.message ?? "Gemini CLI failed") });
+  events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
+  return events;
+}
+
 function decodeGemini(runtime, record, provider = "google", api = "gemini-cli") {
   if (record.type === "init") {
     runtime.sessionId = record.session_id ?? runtime.sessionId;
@@ -222,24 +238,10 @@ function decodeGemini(runtime, record, provider = "google", api = "gemini-cli") 
     return [];
   }
   if (record.type === "message" && record.role === "assistant") return geminiAssistantDelta(runtime, record, provider, api);
-  if (record.type === "tool_use") {
-    const events = [];
-    startTool(runtime, events, { id: String(record.tool_id ?? "tool"), name: String(record.tool_name ?? "tool"), args: record.parameters, provider, api, model: runtime.model, at: record.timestamp });
-    return events;
-  }
-  if (record.type === "tool_result") {
-    const events = [];
-    endTool(runtime, events, { id: String(record.tool_id ?? "tool"), text: record.output ?? record.error?.message, isError: record.status === "error", at: record.timestamp });
-    return events;
-  }
+  if (record.type === "tool_use" || record.type === "tool_result") return geminiToolEvent(runtime, record, provider, api);
   if (record.type === "error") return [{ type: "pi_error", error: String(record.message ?? "Gemini CLI reported an error") }];
   if (record.type !== "result") return [];
-  const events = [];
-  finishStreamingMessage(runtime, events, record.status === "error" ? "error" : "stop");
-  runtime.streaming = false;
-  if (record.status === "error") events.push({ type: "pi_error", error: String(record.error?.message ?? "Gemini CLI failed") });
-  events.push({ type: "agent_end", willRetry: false }, { type: "agent_settled" });
-  return events;
+  return geminiResult(runtime, record);
 }
 
 function ampAssistant(runtime, record) {

@@ -83,6 +83,21 @@ function proximityScore(positionSets) {
   return Math.max(0, 30 - smallestSpan / 8);
 }
 
+function termMatchBoost(text, terms, positions) {
+  let boost = 0;
+  for (let index = 0; index < terms.length; index++) {
+    boost += Math.min(positions[index].length, 3) * 2;
+    if (positions[index].some((position) => hasTokenBoundaries(text, position, terms[index].length))) boost += 8;
+  }
+  return boost;
+}
+
+function roleBoost(result) {
+  if (result?.kind === "name") return 50;
+  if (result?.role === "user") return 20;
+  return result?.role === "assistant" ? 10 : 0;
+}
+
 /** Deterministically score one search result without mutating it or reading ambient state. */
 export function scoreSearchResult(result, query, { referenceTime = null } = {}) {
   const text = snippetText(result).toLowerCase();
@@ -96,14 +111,8 @@ export function scoreSearchResult(result, query, { referenceTime = null } = {}) 
   if (terms.length > 1 && text.includes(terms.join(" "))) score += 70;
   score += proximityScore(positions);
 
-  for (let index = 0; index < terms.length; index++) {
-    score += Math.min(positions[index].length, 3) * 2;
-    if (positions[index].some((position) => hasTokenBoundaries(text, position, terms[index].length))) score += 8;
-  }
-
-  if (result?.kind === "name") score += 50;
-  else if (result?.role === "user") score += 20;
-  else if (result?.role === "assistant") score += 10;
+  score += termMatchBoost(text, terms, positions);
+  score += roleBoost(result);
 
   const timestamp = Date.parse(result?.timestamp ?? "");
   if (Number.isFinite(timestamp) && Number.isFinite(referenceTime)) {

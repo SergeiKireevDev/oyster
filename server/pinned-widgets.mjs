@@ -99,8 +99,8 @@ function pathState(row, resolveSafePath) {
   }
 }
 
-export async function pinnedWidgetDto(state, row, { resolveSafePath, activeTunnels = null } = {}) {
-  const base = {
+function pinnedWidgetBase(row) {
+  return {
     id: row.id,
     kind: row.kind,
     label: row.label,
@@ -112,24 +112,34 @@ export async function pinnedWidgetDto(state, row, { resolveSafePath, activeTunne
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
-  if (row.kind === "live_interface") {
-    const hublot = await state.appStore.repositories.hublots.find(row.hublot_id);
-    const tunnel = activeTunnels?.find((item) => item.id === row.hublot_id) ?? null;
-    const status = tunnel?.status ?? hublot?.status ?? "closed";
-    return {
-      ...base,
-      hublotId: row.hublot_id,
-      availability: tunnel?.url ? "ready" : ["opening", "recovering"].includes(status) ? "opening" : status === "failed" ? "error" : "closed",
-      status,
-      url: tunnel?.url ?? null,
-      port: hublot?.port ?? null,
-      error: hublot?.last_error ?? null,
-    };
-  }
+}
+
+function liveInterfaceAvailability(tunnel, status) {
+  if (tunnel?.url) return "ready";
+  if (["opening", "recovering"].includes(status)) return "opening";
+  return status === "failed" ? "error" : "closed";
+}
+
+async function liveInterfaceDto(state, row, base, activeTunnels) {
+  const hublot = await state.appStore.repositories.hublots.find(row.hublot_id);
+  const tunnel = activeTunnels?.find((item) => item.id === row.hublot_id) ?? null;
+  const status = tunnel?.status ?? hublot?.status ?? "closed";
+  return {
+    ...base,
+    hublotId: row.hublot_id,
+    availability: liveInterfaceAvailability(tunnel, status),
+    status,
+    url: tunnel?.url ?? null,
+    port: hublot?.port ?? null,
+    error: hublot?.last_error ?? null,
+  };
+}
+
+export async function pinnedWidgetDto(state, row, { resolveSafePath, activeTunnels = null } = {}) {
+  const base = pinnedWidgetBase(row);
+  if (row.kind === "live_interface") return liveInterfaceDto(state, row, base, activeTunnels);
   if (row.kind === "monitoring") return { ...base, ...monitoringState(row, resolveSafePath) };
-  if (["image", "video", "markdown", "file", "directory"].includes(row.kind)) {
-    return { ...base, ...pathState(row, resolveSafePath) };
-  }
+  if (["image", "video", "markdown", "file", "directory"].includes(row.kind)) return { ...base, ...pathState(row, resolveSafePath) };
   if (row.kind === "builtin") return { ...base, availability: "ready", builtin: row.target };
   return { ...base, availability: "ready", url: row.target };
 }
@@ -600,6 +610,26 @@ export function createPinnedWidgetRoutes({
     listTunnels,
   });
 
+  async function patchPinnedWidget(body) {
+    const row = await repository.find(String(body.id ?? ""));
+    if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
+    const now = new Date().toISOString();
+    const nextLabel = body.label === undefined ? null : normalizeLabel(body.label);
+    let updated = row;
+    if (body.groupId !== undefined || body.beforeId !== undefined || body.scope !== undefined) {
+      if (row.kind === "builtin" && body.scope !== undefined && body.scope !== row.scope) throw Object.assign(new Error("built-in widgets cannot change scope"), { statusCode: 409 });
+      const identity = body.scope === undefined ? null : await scopeIdentity(body, ensureSessionOwner);
+      updated = await reorderWidget(state, row, {
+        groupId: body.groupId === undefined ? undefined : body.groupId ? String(body.groupId) : null,
+        beforeId: body.beforeId ? String(body.beforeId) : null,
+        identity,
+      }, now);
+    }
+    if (nextLabel === null) return updated;
+    await repository.update(row.id, { label: nextLabel, updated_at: now });
+    return repository.find(row.id);
+  }
+
   return {
     "GET /pinned-widgets": async (_req, res, url) => {
       json(res, 200, await listPinnedWidgets(state, {
@@ -654,26 +684,7 @@ export function createPinnedWidgetRoutes({
       if (parsedBody === undefined) return;
       try {
         const body = assertRequestBody(parsedBody);
-        const row = await repository.find(String(body.id ?? ""));
-        if (!row) throw Object.assign(new Error("no such pinned widget"), { statusCode: 404 });
-        const now = new Date().toISOString();
-        const nextLabel = body.label === undefined ? null : normalizeLabel(body.label);
-        let updated = row;
-        if (body.groupId !== undefined || body.beforeId !== undefined || body.scope !== undefined) {
-          if (row.kind === "builtin" && body.scope !== undefined && body.scope !== row.scope) {
-            throw Object.assign(new Error("built-in widgets cannot change scope"), { statusCode: 409 });
-          }
-          const identity = body.scope === undefined ? null : await scopeIdentity(body, ensureSessionOwner);
-          updated = await reorderWidget(state, row, {
-            groupId: body.groupId === undefined ? undefined : body.groupId ? String(body.groupId) : null,
-            beforeId: body.beforeId ? String(body.beforeId) : null,
-            identity,
-          }, now);
-        }
-        if (nextLabel !== null) {
-          await repository.update(row.id, { label: nextLabel, updated_at: now });
-          updated = await repository.find(row.id);
-        }
+        const updated = await patchPinnedWidget(body);
         const dto = await pinnedWidgetDto(state, updated, { resolveSafePath, activeTunnels: await listTunnels(state) });
         emit("pinned_widget_updated", { widget: dto });
         json(res, 200, { widget: dto, ...await currentCollection(body) });

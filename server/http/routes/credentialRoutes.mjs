@@ -83,6 +83,27 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
     json(res, status, { error: safeMessage, code });
   }
 
+  async function restartAfterMutation(input) {
+    const harnesses = ["pi", ...(input.provider === "openrouter"
+      ? Object.entries(openRouterRouting?.status().routes ?? {}).filter(([, provider]) => provider === "openrouter").map(([id]) => id) : [])];
+    const results = [];
+    for (const harness of harnesses) {
+      try { results.push(publicRestartResult(await restartActiveRunners({ harness }))); }
+      catch { results.push(null); }
+    }
+    if (!results.every(Boolean)) return null;
+    const partial = results.some((result) => result.status === "partial");
+    return {
+      status: partial ? "partial" : "restarted",
+      runnerIds: results.flatMap((result) => result.runnerIds),
+      ...(partial ? { failedRunnerIds: results.flatMap((result) => result.failedRunnerIds ?? []) } : {}),
+    };
+  }
+
+  function credentialMutationResult(input, remove) {
+    return remove ? { provider: input.provider, removed: true } : { provider: input.provider, credentialType: "api_key" };
+  }
+
   async function mutate(req, res, url, { remove = false } = {}) {
     if (url?.search) {
       json(res, 400, { error: "credential mutations require a JSON body without query parameters" });
@@ -112,26 +133,10 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
 
     // Build the public result locally instead of trusting a credential-store
     // implementation not to return the submitted key or other private data.
-    const credential = remove
-      ? { provider: input.provider, removed: true }
-      : { provider: input.provider, credentialType: "api_key" };
+    const credential = credentialMutationResult(input, remove);
     let restart;
-    try {
-      const harnesses = ["pi", ...(input.provider === "openrouter"
-        ? Object.entries(openRouterRouting?.status().routes ?? {}).filter(([, provider]) => provider === "openrouter").map(([id]) => id) : [])];
-      const results = [];
-      for (const harness of harnesses) {
-        try { results.push(publicRestartResult(await restartActiveRunners({ harness }))); }
-        catch { results.push(null); }
-      }
-      if (results.every(Boolean)) restart = {
-        status: results.some((result) => result.status === "partial") ? "partial" : "restarted",
-        runnerIds: results.flatMap((result) => result.runnerIds),
-        ...(results.some((result) => result.status === "partial") ? { failedRunnerIds: results.flatMap((result) => result.failedRunnerIds ?? []) } : {}),
-      };
-    } catch {
-      // Converted to the durable-write failure response below.
-    }
+    try { restart = await restartAfterMutation(input); }
+    catch { /* Converted to the durable-write failure response below. */ }
     if (!restart) {
       log("error", "[oyster] credential mutation restart failed", {
         operation: remove ? "remove" : "set",

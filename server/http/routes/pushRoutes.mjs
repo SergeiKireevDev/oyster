@@ -1,12 +1,21 @@
 const MAX_ENDPOINT_BYTES = 8 * 1024;
 const MAX_KEY_BYTES = 512;
 
+function validEndpoint(endpoint) {
+  return typeof endpoint === "string" && endpoint.startsWith("https://") && Buffer.byteLength(endpoint) <= MAX_ENDPOINT_BYTES;
+}
+
+function validKey(value) {
+  return typeof value === "string" && Boolean(value) && Buffer.byteLength(value) <= MAX_KEY_BYTES;
+}
+
+function validExpiration(value) {
+  return value == null || (Number.isSafeInteger(value) && value >= 0);
+}
+
 function validSubscription(value) {
-  if (!value || typeof value !== "object" || typeof value.endpoint !== "string" || !value.keys || typeof value.keys !== "object") return false;
-  if (!value.endpoint.startsWith("https://") || Buffer.byteLength(value.endpoint) > MAX_ENDPOINT_BYTES) return false;
-  if (typeof value.keys.p256dh !== "string" || !value.keys.p256dh || Buffer.byteLength(value.keys.p256dh) > MAX_KEY_BYTES) return false;
-  if (typeof value.keys.auth !== "string" || !value.keys.auth || Buffer.byteLength(value.keys.auth) > MAX_KEY_BYTES) return false;
-  return value.expirationTime == null || (Number.isSafeInteger(value.expirationTime) && value.expirationTime >= 0);
+  if (!value || typeof value !== "object" || !value.keys || typeof value.keys !== "object") return false;
+  return validEndpoint(value.endpoint) && validKey(value.keys.p256dh) && validKey(value.keys.auth) && validExpiration(value.expirationTime);
 }
 
 export function createPushRoutes({ requestContext, pushService } = {}) {

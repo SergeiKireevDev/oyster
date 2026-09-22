@@ -108,6 +108,37 @@ function terminateRuntime(runtime) {
   runtime.stopTimer.unref();
 }
 
+async function finishRoutineProcess({ state, definition, mode, run, repository, code, signal, spawnError }) {
+  if (spawnError) {
+    await repository.finishRun(run.id, { status: "failed", error: spawnError.message, finishedAt: new Date().toISOString() });
+    await emit(state, definition, "error");
+    return;
+  }
+  const current = await repository.findRun(run.id);
+  console.log(`[oyster] routine ${definition.name} ${mode} exited (code=${code}, signal=${signal})`);
+  const exitReason = signal ? `signal ${signal}` : `exit ${code}`;
+  if (current?.status === "stopping") {
+    await repository.finishRun(run.id, { status: "stopped", finishedAt: new Date().toISOString(), exitCode: code });
+    await emit(state, definition, "stopped");
+  } else if (mode === "teardown") {
+    await repository.finishRun(run.id, {
+      status: code === 0 ? "idle" : "failed",
+      result: code === 0 ? "byproducts removed" : null,
+      error: code === 0 ? null : (current?.message ?? `teardown failed (${exitReason})`),
+      finishedAt: new Date().toISOString(), exitCode: code,
+    });
+    await emit(state, definition, "teardown_finished");
+  } else {
+    if (code === 0 && current?.progress !== null) await repository.updateProgress(run.id, 100, current?.message ?? null);
+    await repository.finishRun(run.id, {
+      status: code === 0 ? "done" : "failed",
+      error: code === 0 ? null : (current?.message ?? `run failed (${exitReason})`),
+      finishedAt: new Date().toISOString(), exitCode: code,
+    });
+    await emit(state, definition, "finished");
+  }
+}
+
 async function runScript(state, definition, mode) {
   const repository = routineRepository(state);
   const cwd = definition.cwd && existsSync(definition.cwd) ? definition.cwd : state.currentDir;
@@ -191,34 +222,7 @@ async function runScript(state, definition, mode) {
     try {
     await Promise.all([...lineTasks]);
     if (!clearRuntime()) return;
-    if (spawnError) {
-      await repository.finishRun(run.id, { status: "failed", error: spawnError.message, finishedAt: new Date().toISOString() });
-      await emit(state, definition, "error");
-      return;
-    }
-    const current = await repository.findRun(run.id);
-    console.log(`[oyster] routine ${definition.name} ${mode} exited (code=${code}, signal=${signal})`);
-    const exitReason = signal ? `signal ${signal}` : `exit ${code}`;
-    if (current?.status === "stopping") {
-      await repository.finishRun(run.id, { status: "stopped", finishedAt: new Date().toISOString(), exitCode: code });
-      await emit(state, definition, "stopped");
-    } else if (mode === "teardown") {
-      await repository.finishRun(run.id, {
-        status: code === 0 ? "idle" : "failed",
-        result: code === 0 ? "byproducts removed" : null,
-        error: code === 0 ? null : (current?.message ?? `teardown failed (${exitReason})`),
-        finishedAt: new Date().toISOString(), exitCode: code,
-      });
-      await emit(state, definition, "teardown_finished");
-    } else {
-      if (code === 0 && current?.progress !== null) await repository.updateProgress(run.id, 100, current?.message ?? null);
-      await repository.finishRun(run.id, {
-        status: code === 0 ? "done" : "failed",
-        error: code === 0 ? null : (current?.message ?? `run failed (${exitReason})`),
-        finishedAt: new Date().toISOString(), exitCode: code,
-      });
-      await emit(state, definition, "finished");
-    }
+    await finishRoutineProcess({ state, definition, mode, run, repository, code, signal, spawnError });
     } finally {
       resolveCompletion();
     }

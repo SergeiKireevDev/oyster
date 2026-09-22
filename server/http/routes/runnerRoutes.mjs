@@ -12,29 +12,33 @@ import { errorMessage } from "../../errors.mjs";
 import { disableCaching } from "../createRequestContext.mjs";
 import { isNonArrayObject as isJsonObject } from "../../valuePredicates.mjs";
 
-function parseSubagentRequest(body, { state, resolveSafePath, resolvePath, isDirectory }) {
-  if (!isJsonObject(body)) return { status: 400, error: "request body must be a JSON object" };
-  const prompt = typeof body.prompt === "string" ? body.prompt : "";
-  const parentSessionId = typeof body.parentSessionId === "string" ? body.parentSessionId.trim() : "";
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!prompt || Buffer.byteLength(prompt) > MAX_PROMPT_BYTES) {
-    return { status: 400, error: "prompt must be a non-empty string no larger than 5 MiB" };
-  }
-  if (!parentSessionId || Buffer.byteLength(parentSessionId) > MAX_PARENT_SESSION_ID_BYTES || parentSessionId.includes("\0")) {
-    return { status: 400, error: "parentSessionId must be a non-empty session identity no larger than 512 bytes" };
-  }
-  if (!name || Buffer.byteLength(name) > MAX_SUBAGENT_NAME_BYTES || name.includes("\0")) {
-    return { status: 400, error: "name must be a non-empty string no larger than 256 bytes" };
-  }
-  if (body.dir !== undefined && (typeof body.dir !== "string" || !body.dir.trim())) {
-    return { status: 400, error: "dir must be a non-empty string" };
-  }
+function textField(body, name) {
+  return typeof body[name] === "string" ? body[name].trim() : "";
+}
+
+function boundedText(value, maxBytes, { rejectNul = false } = {}) {
+  return Boolean(value) && Buffer.byteLength(value) <= maxBytes && (!rejectNul || !value.includes("\0"));
+}
+
+function resolveSubagentDir(body, { state, resolveSafePath, resolvePath, isDirectory }) {
+  if (body.dir !== undefined && (typeof body.dir !== "string" || !body.dir.trim())) return { status: 400, error: "dir must be a non-empty string" };
   const dir = body.dir === undefined ? state.currentDir : resolveSafePath(resolvePath(body.dir));
   if (!dir) return { status: 403, error: `path outside the allowed roots: ${body?.dir}` };
   let validDirectory = false;
   try { validDirectory = isDirectory(dir); } catch {}
-  if (!validDirectory) return { status: 400, error: `not a directory: ${dir}` };
-  return { prompt, parentSessionId, name, dir };
+  return validDirectory ? { dir } : { status: 400, error: `not a directory: ${dir}` };
+}
+
+function parseSubagentRequest(body, options) {
+  if (!isJsonObject(body)) return { status: 400, error: "request body must be a JSON object" };
+  const prompt = typeof body.prompt === "string" ? body.prompt : "";
+  const parentSessionId = textField(body, "parentSessionId");
+  const name = textField(body, "name");
+  if (!boundedText(prompt, MAX_PROMPT_BYTES)) return { status: 400, error: "prompt must be a non-empty string no larger than 5 MiB" };
+  if (!boundedText(parentSessionId, MAX_PARENT_SESSION_ID_BYTES, { rejectNul: true })) return { status: 400, error: "parentSessionId must be a non-empty session identity no larger than 512 bytes" };
+  if (!boundedText(name, MAX_SUBAGENT_NAME_BYTES, { rejectNul: true })) return { status: 400, error: "name must be a non-empty string no larger than 256 bytes" };
+  const directory = resolveSubagentDir(body, options);
+  return directory.error ? directory : { prompt, parentSessionId, name, dir: directory.dir };
 }
 
 async function startSubagentRunner({ spawnRunner, dir, parentSessionId, name }) {
@@ -93,31 +97,30 @@ async function streamSubagentLifecycle({
   };
   const fail = (fallback, error) => finish(formatSubagentFailure(fallback, error, assistantOutput));
 
+  const assistantText = (message) => (Array.isArray(message.content) ? message.content : [])
+    .filter((part) => isJsonObject(part) && part.type === "text" && typeof part.text === "string")
+    .map((part) => part.text)
+    .join("\n");
+  const rememberAssistantMessage = (message) => {
+    const text = assistantText(message);
+    if (text) assistantOutput = text;
+    if (["error", "aborted"].includes(message.stopReason)) {
+      assistantError = typeof message.errorMessage === "string" && message.errorMessage
+        ? message.errorMessage
+        : `assistant stopped: ${message.stopReason}`;
+    }
+  };
+  const observeEvent = (event) => {
+    if (!isJsonObject(event)) return;
+    if (event.type === "message_end" && event.message?.role === "assistant") rememberAssistantMessage(event.message);
+    else if (event.type === "agent_settled") finish({ ok: !assistantError, output: assistantOutput, errorLog: assistantError });
+    else if (event.type === "response" && event.command === "prompt" && event.success === false) fail("Subagent prompt was rejected.", event.error);
+    else if (event.type === "pi_error") fail("Subagent process failed.", event.error);
+    else if (event.type === "pi_exit") fail(`Subagent exited before settling${event.signal ? ` (${event.signal})` : ""}.`);
+  };
+
   try {
-    observerDispose = observeRunner(runner, (event) => {
-      if (!isJsonObject(event)) return;
-      if (event.type === "message_end" && event.message?.role === "assistant") {
-        const content = Array.isArray(event.message.content) ? event.message.content : [];
-        const text = content
-          .filter((part) => isJsonObject(part) && part.type === "text" && typeof part.text === "string")
-          .map((part) => part.text)
-          .join("\n");
-        if (text) assistantOutput = text;
-        if (["error", "aborted"].includes(event.message.stopReason)) {
-          assistantError = typeof event.message.errorMessage === "string" && event.message.errorMessage
-            ? event.message.errorMessage
-            : `assistant stopped: ${event.message.stopReason}`;
-        }
-      } else if (event.type === "agent_settled") {
-        finish({ ok: !assistantError, output: assistantOutput, errorLog: assistantError });
-      } else if (event.type === "response" && event.command === "prompt" && event.success === false) {
-        fail("Subagent prompt was rejected.", event.error);
-      } else if (event.type === "pi_error") {
-        fail("Subagent process failed.", event.error);
-      } else if (event.type === "pi_exit") {
-        fail(`Subagent exited before settling${event.signal ? ` (${event.signal})` : ""}.`);
-      }
-    });
+    observerDispose = observeRunner(runner, observeEvent);
     if (typeof observerDispose !== "function") throw new TypeError("observeRunner must return a disposal function");
     if (disposeRequested) dispose();
   } catch (error) {
@@ -249,6 +252,25 @@ export function createRunnerRoutes({
     return validDirectory ? { dir } : { error: `not a directory: ${dir}`, status: 400 };
   }
 
+  function validateUiRequestBody(body) {
+    if (!isJsonObject(body) || (body.method !== "input" && body.method !== "confirm")) return "method must be 'input' or 'confirm'";
+    const title = typeof body.title === "string" ? body.title.trim() : "";
+    if (!title || Buffer.byteLength(title) > MAX_UI_REQUEST_TEXT_BYTES) return "title must be a non-empty string no larger than 4 KiB";
+    for (const field of ["placeholder", "message"]) {
+      if (body[field] !== undefined && (typeof body[field] !== "string" || Buffer.byteLength(body[field]) > MAX_UI_REQUEST_TEXT_BYTES)) {
+        return `${field} must be a string no larger than 4 KiB`;
+      }
+    }
+    return null;
+  }
+
+  function uiRequestPayload(body) {
+    const title = typeof body.title === "string" ? body.title.trim() : "";
+    return body.method === "input"
+      ? { method: "input", title, ...(body.placeholder ? { placeholder: body.placeholder } : {}), secret: body.secret === true }
+      : { method: "confirm", title, message: body.message ?? "" };
+  }
+
   return {
     "GET /events": async (req, res, url) => {
       const runner = await runnerFromReq(url);
@@ -360,33 +382,14 @@ export function createRunnerRoutes({
     "POST /runner/ui-request": async (req, res, url) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
-      if (!isJsonObject(body) || (body.method !== "input" && body.method !== "confirm")) {
-        json(res, 400, { error: "method must be 'input' or 'confirm'" });
-        return;
-      }
-      const title = typeof body.title === "string" ? body.title.trim() : "";
-      if (!title || Buffer.byteLength(title) > MAX_UI_REQUEST_TEXT_BYTES) {
-        json(res, 400, { error: "title must be a non-empty string no larger than 4 KiB" });
-        return;
-      }
-      for (const field of ["placeholder", "message"]) {
-        if (body[field] !== undefined && (typeof body[field] !== "string" || Buffer.byteLength(body[field]) > MAX_UI_REQUEST_TEXT_BYTES)) {
-          json(res, 400, { error: `${field} must be a string no larger than 4 KiB` });
-          return;
-        }
-      }
+      const bodyError = validateUiRequestBody(body);
+      if (bodyError) { json(res, 400, { error: bodyError }); return; }
       const runner = state.runners.get(String(url.searchParams.get("runner") ?? ""));
-      if (!runner) {
-        json(res, 404, { error: "no such runner" });
-        return;
-      }
-      const request = body.method === "input"
-        ? { method: "input", title, ...(body.placeholder ? { placeholder: body.placeholder } : {}), secret: body.secret === true }
-        : { method: "confirm", title, message: body.message ?? "" };
+      if (!runner) { json(res, 404, { error: "no such runner" }); return; }
       const controller = new AbortController();
       res.once?.("close", () => controller.abort());
       disableCaching(res);
-      json(res, 200, await requestRunnerUi(runner, request, { signal: controller.signal }));
+      json(res, 200, await requestRunnerUi(runner, uiRequestPayload(body), { signal: controller.signal }));
     },
 
     "DELETE /runners": async (_req, res, url) => {

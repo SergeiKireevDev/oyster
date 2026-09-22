@@ -12,26 +12,23 @@ function emitServerEvent(state, event) {
   }
 }
 
-function parseCreateBody(body) {
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    throw new TypeError("request body must be a JSON object");
-  }
-
+function assertCreateBodyShape(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new TypeError("request body must be a JSON object");
   if (body.type !== undefined || body.path !== undefined || body.brief !== undefined) {
     throw new TypeError("service provisioning is not supported; provide the port of an existing service");
   }
+}
+
+function assertOptionalString(value, label) {
+  if (value !== undefined && value !== null && typeof value !== "string") throw new TypeError(`${label} must be a string`);
+}
+
+function parseCreateBody(body) {
+  assertCreateBodyShape(body);
   const port = body.port;
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new TypeError("port must be an integer between 1 and 65535");
-  }
-
-  if (body.label !== undefined && body.label !== null && typeof body.label !== "string") {
-    throw new TypeError("label must be a string");
-  }
-  if (body.sessionId !== undefined && body.sessionId !== null && typeof body.sessionId !== "string") {
-    throw new TypeError("sessionId must be a string");
-  }
-
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new TypeError("port must be an integer between 1 and 65535");
+  assertOptionalString(body.label, "label");
+  assertOptionalString(body.sessionId, "sessionId");
   return {
     options: {
       port,

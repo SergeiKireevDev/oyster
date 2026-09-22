@@ -198,6 +198,29 @@ function summarizeDiff(piProcesses, dir, model, diff) {
   });
 }
 
+async function cleanCheckpointResponse(dir) {
+  const headResult = await git(dir, ["rev-parse", "--short", "HEAD"]);
+  if (headResult.code !== 0 || !headResult.stdout.trim()) return { status: 400, body: { error: "repository has no commits to checkpoint" } };
+  const subjectResult = await git(dir, ["log", "-1", "--format=%s"]);
+  return { status: 200, body: {
+    committed: false,
+    reason: "workdir is clean",
+    hash: headResult.stdout.trim(),
+    message: subjectResult.code === 0 ? (subjectResult.stdout.trim() || undefined) : undefined,
+  } };
+}
+
+async function checkpointMessage(piProcesses, dir, label, model) {
+  if (model) {
+    const diffResult = await git(dir, ["diff", "--cached"]);
+    const diff = diffResult.code === 0 ? diffResult.stdout.slice(0, 40_000) : "";
+    const summary = diff.trim() ? await summarizeDiff(piProcesses, dir, model, diff) : null;
+    if (summary) return { message: `checkpoint: ${summary}`, summarized: true };
+  }
+  if (label) return { message: `checkpoint: ${label}`, summarized: false };
+  return { message: `checkpoint ${new Date().toISOString()}`, summarized: false };
+}
+
 /** Commit every pending change in `dir` as a checkpoint commit. With a
  *  `model`, the staged diff is summarized into the commit message; `label`
  *  is the fallback message (before the timestamp) when there is no model
@@ -207,35 +230,13 @@ export async function checkpointWorkdir(piProcesses, dir, label, model = null) {
   if (top.code !== 0) return { status: 400, body: { error: `not a git repository: ${dir}` } };
   const st = await git(dir, ["status", "--porcelain"]);
   if (st.code !== 0) return { status: 500, body: { error: `git status failed: ${st.stderr.trim()}` } };
-  if (!st.stdout) {
-    // A clean tree can only be checkpointed when HEAD identifies its state.
-    const headResult = await git(dir, ["rev-parse", "--short", "HEAD"]);
-    if (headResult.code !== 0 || !headResult.stdout.trim()) {
-      return { status: 400, body: { error: "repository has no commits to checkpoint" } };
-    }
-    const subjectResult = await git(dir, ["log", "-1", "--format=%s"]);
-    return { status: 200, body: {
-      committed: false,
-      reason: "workdir is clean",
-      hash: headResult.stdout.trim(),
-      message: subjectResult.code === 0 ? (subjectResult.stdout.trim() || undefined) : undefined,
-    } };
-  }
+  if (!st.stdout) return cleanCheckpointResponse(dir);
   const add = await git(dir, ["add", "-A"]);
   if (add.code !== 0) return { status: 500, body: { error: `git add failed: ${add.stderr.trim()}` } };
   const changedFiles = await git(dir, ["diff", "--cached", "--name-only", "-z"]);
   if (changedFiles.code !== 0) return { status: 500, body: { error: `git diff failed: ${changedFiles.stderr.trim()}` } };
   const files = changedFiles.stdout.split("\0").filter(Boolean).length;
-  let message = null;
-  let summarized = false;
-  if (model) {
-    const diffResult = await git(dir, ["diff", "--cached"]);
-    const diff = diffResult.code === 0 ? diffResult.stdout.slice(0, 40_000) : "";
-    const summary = diff.trim() ? await summarizeDiff(piProcesses, dir, model, diff) : null;
-    if (summary) { message = `checkpoint: ${summary}`; summarized = true; }
-  }
-  if (!message && label) message = `checkpoint: ${label}`;
-  message ??= `checkpoint ${new Date().toISOString()}`;
+  const { message, summarized } = await checkpointMessage(piProcesses, dir, label, model);
   const ci = await git(dir, ["commit", "-m", message]);
   if (ci.code !== 0) {
     return { status: 500, body: { error: `git commit failed: ${(ci.stderr || ci.stdout).trim()}` } };

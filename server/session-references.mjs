@@ -40,31 +40,26 @@ export function createSessionReferenceCodec({ agentDir, sqlitePath, jsonlRoot } 
     ? resolve(resolvedAgentDir, "sessions.sqlite")
     : resolve(configuredSqlitePath);
 
-  function validate(reference) {
-    if (!reference || typeof reference !== "object" || Array.isArray(reference)) {
-      throw new Error("session reference must be an object");
+  function validateStoragePath(backend, value) {
+    if (typeof value !== "string" || !value) throw new Error("session reference storagePath is required");
+    const storagePath = resolve(value);
+    if (backend === "jsonl" && (!storagePath.endsWith(".jsonl") || !confinedTo(storagePath, resolvedJsonlRoot) || storagePath === resolvedJsonlRoot)) {
+      throw new Error(`JSONL session path must be a .jsonl file under ${resolvedJsonlRoot}`);
     }
+    if (backend === "sqlite" && storagePath !== resolvedSqlitePath) throw new Error(`SQLite session database must be ${resolvedSqlitePath}`);
+    return storagePath;
+  }
+
+  function validate(reference) {
+    if (!reference || typeof reference !== "object" || Array.isArray(reference)) throw new Error("session reference must be an object");
     const backend = reference.backend;
     if (!BACKENDS.has(backend)) throw new Error(`unsupported session reference backend: ${backend ?? "missing"}`);
     const id = requireId(reference.id);
     if (EXTERNAL_BACKENDS.has(backend)) {
-      if (reference.storagePath !== null && reference.storagePath !== undefined) {
-        throw new Error(`${backend} session references do not use a storagePath`);
-      }
+      if (reference.storagePath !== null && reference.storagePath !== undefined) throw new Error(`${backend} session references do not use a storagePath`);
       return Object.freeze({ backend, id, storagePath: null });
     }
-    if (typeof reference.storagePath !== "string" || !reference.storagePath) {
-      throw new Error("session reference storagePath is required");
-    }
-    const storagePath = resolve(reference.storagePath);
-    if (backend === "jsonl") {
-      if (!storagePath.endsWith(".jsonl") || !confinedTo(storagePath, resolvedJsonlRoot) || storagePath === resolvedJsonlRoot) {
-        throw new Error(`JSONL session path must be a .jsonl file under ${resolvedJsonlRoot}`);
-      }
-    } else if (storagePath !== resolvedSqlitePath) {
-      throw new Error(`SQLite session database must be ${resolvedSqlitePath}`);
-    }
-    return Object.freeze({ backend, id, storagePath });
+    return Object.freeze({ backend, id, storagePath: validateStoragePath(backend, reference.storagePath) });
   }
 
   function serialize(reference) {

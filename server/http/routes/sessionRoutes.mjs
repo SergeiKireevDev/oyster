@@ -255,13 +255,19 @@ export function createSessionRoutes({
     } catch { return null; }
   }
 
+  function validJsonlSessionPath(path) {
+    return Boolean(path) && isWithin(path, catalog.root) && path !== catalog.root && path.endsWith(".jsonl");
+  }
+
+  function validateSessionSearchScope({ path, sessionIdentity }) {
+    if (sqlite) return sessionIdentity ? null : "scope=session requires a session key";
+    return validJsonlSessionPath(path) ? null : "scope=session requires a session file path";
+  }
+
   function validateSearchRequest({ query, scope, path, sessionIdentity }) {
     if (query.length < 3) return "query must be at least 3 characters";
     if (!["session", "folder", "all"].includes(scope)) return `invalid scope: ${scope}`;
-    if (scope === "session" && sqlite && !sessionIdentity) return "scope=session requires a session key";
-    if (scope === "session" && !sqlite && (!path || !isWithin(path, catalog.root) || path === catalog.root || !path.endsWith(".jsonl"))) {
-      return "scope=session requires a session file path";
-    }
+    if (scope === "session") return validateSessionSearchScope({ path, sessionIdentity });
     if (scope === "folder" && !sqlite && path && !isWithin(path, catalog.root)) return "folder must be under the sessions root";
     return null;
   }

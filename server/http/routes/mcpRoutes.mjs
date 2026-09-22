@@ -74,6 +74,37 @@ function describeRoutine(r) {
   return `${r.name}: ${bits.join(" ")}`;
 }
 
+async function listRoutineTool({ api, renderText, boundSession }) {
+  const { routines, dir } = await api("GET", "/routines");
+  const mine = routines.filter((r) => !r.sessionId || r.sessionId === boundSession);
+  const elsewhere = routines.length - mine.length;
+  const lines = mine.map((r) => `- ${describeRoutine(r)}${r.sessionId ? "" : " (unbound)"}`);
+  const note = elsewhere ? `\n(${elsewhere} more bound to other sessions — not usable here until released)` : "";
+  return renderText((lines.length ? `Routines in ${dir}:\n${lines.join("\n")}` : `No routines available (store: ${dir}).`) + note, { routines: mine, boundElsewhere: elsewhere });
+}
+
+async function routineStatusTool({ api, renderText, name }) {
+  const { routines } = await api("GET", "/routines");
+  const routine = routines.find((candidate) => candidate.name === name);
+  if (!routine) throw new Error(`no such routine: ${name}`);
+  const tail = (routine.log ?? []).slice(-10).join("\n");
+  return renderText(describeRoutine(routine) + (tail ? `\nrecent output:\n${tail}` : ""), routine);
+}
+
+function routineToolMessage(action, routine, progressionNotes) {
+  return {
+    create:
+      `Routine "${routine.name}" registered as ${routine.path} and bound to this session (runs in ${routine.cwd ?? "the session workdir"}). ` +
+      "It appears in the UI sidebar; start it with routine action=start." +
+      (progressionNotes.length ? ` Progression warning: ${progressionNotes.join("; ")}.` : " Progression contract detected."),
+    start: `Routine "${routine.name}" started (cwd ${routine.cwd ?? "?"}). Progression from its '::progress' lines streams live to the UI; check on it with routine action=status.`,
+    stop: `Routine "${routine.name}" is being stopped (SIGTERM to its process group, SIGKILL after 4s).`,
+    teardown: `Routine "${routine.name}" teardown started — its byproducts are being removed.`,
+    release: `Routine "${routine.name}" released — it is no longer bound to a session.`,
+    delete: `Routine "${routine.name}" deleted from the store (its byproducts were NOT touched).`,
+  }[action];
+}
+
 async function createMonitorWidget({ params, scope, api, text: renderText, workdir, sessionId }) {
   if (!params.label?.trim()) throw new Error("'monitor' requires a label");
   if (!params.preview_script || !params.content_script) throw new Error("'monitor' requires preview_script and content_script");
@@ -348,22 +379,9 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
   }, async (params) => {
     const boundSession = params.session_id ?? sessionId;
     const { action, name } = params;
-    if (action === "list") {
-      const { routines, dir } = await api("GET", "/routines");
-      const mine = routines.filter((r) => !r.sessionId || r.sessionId === boundSession);
-      const elsewhere = routines.length - mine.length;
-      const lines = mine.map((r) => `- ${describeRoutine(r)}${r.sessionId ? "" : " (unbound)"}`);
-      const note = elsewhere ? `\n(${elsewhere} more bound to other sessions — not usable here until released)` : "";
-      return text((lines.length ? `Routines in ${dir}:\n${lines.join("\n")}` : `No routines available (store: ${dir}).`) + note, { routines: mine, boundElsewhere: elsewhere });
-    }
+    if (action === "list") return listRoutineTool({ api, renderText: text, boundSession });
     if (!name) throw new Error(`'${action}' requires a name`);
-    if (action === "status") {
-      const { routines } = await api("GET", "/routines");
-      const r = routines.find((x) => x.name === name);
-      if (!r) throw new Error(`no such routine: ${name}`);
-      const tail = (r.log ?? []).slice(-10).join("\n");
-      return text(describeRoutine(r) + (tail ? `\nrecent output:\n${tail}` : ""), r);
-    }
+    if (action === "status") return routineStatusTool({ api, renderText: text, name });
     if (action === "create" && !params.script) throw new Error("'create' requires a script");
     const progressionNotes = action === "create" ? progressionWarnings(params.script) : [];
     const { routine } = await api("POST", "/routines", {
@@ -372,18 +390,7 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
       sessionId: boundSession ?? requireSession(),
       ...(action === "create" ? { script: params.script } : {}),
     });
-    const message = {
-      create:
-        `Routine "${routine.name}" registered as ${routine.path} and bound to this session (runs in ${routine.cwd ?? "the session workdir"}). ` +
-        "It appears in the UI sidebar; start it with routine action=start." +
-        (progressionNotes.length ? ` Progression warning: ${progressionNotes.join("; ")}.` : " Progression contract detected."),
-      start: `Routine "${routine.name}" started (cwd ${routine.cwd ?? "?"}). Progression from its '::progress' lines streams live to the UI; check on it with routine action=status.`,
-      stop: `Routine "${routine.name}" is being stopped (SIGTERM to its process group, SIGKILL after 4s).`,
-      teardown: `Routine "${routine.name}" teardown started — its byproducts are being removed.`,
-      release: `Routine "${routine.name}" released — it is no longer bound to a session.`,
-      delete: `Routine "${routine.name}" deleted from the store (its byproducts were NOT touched).`,
-    }[action];
-    return text(message, { ...routine, progressionWarnings: progressionNotes });
+    return text(routineToolMessage(action, routine, progressionNotes), { ...routine, progressionWarnings: progressionNotes });
   });
 
   return server;

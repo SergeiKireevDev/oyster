@@ -67,17 +67,9 @@ function optionalTimestamp(value) {
   return Number.isFinite(value) ? value : null;
 }
 
-/**
- * Exchange a refresh token at Anthropic's token endpoint (the same client id,
- * scopes, and JSON body pi's login uses). Refresh tokens are single-use: the
- * returned pair replaces the one passed in. Errors carry `invalidGrant` when
- * the endpoint rejected the token itself, which means re-authentication.
- */
-export async function refreshAnthropicOAuthGrant(refreshToken, { fetchImpl = fetch, now = Date.now } = {}) {
-  if (typeof refreshToken !== "string" || !refreshToken) throw refreshError("an Anthropic OAuth refresh token is required");
-  let response;
+async function requestAnthropicRefresh(fetchImpl, refreshToken) {
   try {
-    response = await fetchImpl(ANTHROPIC_TOKEN_URL, {
+    return await fetchImpl(ANTHROPIC_TOKEN_URL, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({ grant_type: "refresh_token", client_id: ANTHROPIC_CLIENT_ID, refresh_token: refreshToken }),
@@ -86,6 +78,26 @@ export async function refreshAnthropicOAuthGrant(refreshToken, { fetchImpl = fet
   } catch (cause) {
     throw refreshError(`Anthropic token refresh request failed: ${cause?.message ?? cause}`, { cause });
   }
+}
+
+function requireRefreshPayload(payload, status) {
+  if (!plainObject(payload)
+    || typeof payload.access_token !== "string" || !payload.access_token
+    || typeof payload.refresh_token !== "string" || !payload.refresh_token
+    || !Number.isFinite(payload.expires_in)) {
+    throw refreshError("Anthropic token refresh returned an invalid response", { status });
+  }
+}
+
+/**
+ * Exchange a refresh token at Anthropic's token endpoint (the same client id,
+ * scopes, and JSON body pi's login uses). Refresh tokens are single-use: the
+ * returned pair replaces the one passed in. Errors carry `invalidGrant` when
+ * the endpoint rejected the token itself, which means re-authentication.
+ */
+export async function refreshAnthropicOAuthGrant(refreshToken, { fetchImpl = fetch, now = Date.now } = {}) {
+  if (typeof refreshToken !== "string" || !refreshToken) throw refreshError("an Anthropic OAuth refresh token is required");
+  const response = await requestAnthropicRefresh(fetchImpl, refreshToken);
   const text = await response.text();
   let payload;
   try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
@@ -96,12 +108,7 @@ export async function refreshAnthropicOAuthGrant(refreshToken, { fetchImpl = fet
       { status: response.status, invalidGrant: code === "invalid_grant" },
     );
   }
-  if (!plainObject(payload)
-    || typeof payload.access_token !== "string" || !payload.access_token
-    || typeof payload.refresh_token !== "string" || !payload.refresh_token
-    || !Number.isFinite(payload.expires_in)) {
-    throw refreshError("Anthropic token refresh returned an invalid response", { status: response.status });
-  }
+  requireRefreshPayload(payload, response.status);
   const issuedAt = now();
   return Object.freeze({
     type: "oauth",

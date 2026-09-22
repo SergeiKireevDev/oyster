@@ -339,23 +339,38 @@ export function searchSessionFile(path, query, maxHitsPerFile = 25, includeTools
  *   folder  -> path = a folder under SESSIONS_ROOT (default: defaultDir)
  *   all     -> every folder under SESSIONS_ROOT
  */
+function filesForSearchScope({ scope, path, defaultDir }) {
+  if (scope === "session") return typeof path === "string" && path ? [path] : [];
+  const dirs = scope === "all" ? listSessionFolders().map((folder) => folder.dir) : [path || defaultDir];
+  const files = [];
+  for (const dir of dirs) {
+    if (!dir || !existsSync(dir)) continue;
+    for (const fileName of jsonlFileNames(dir)) files.push(join(dir, fileName));
+  }
+  return files;
+}
+
+function searchResultFromHit(hit, file, folderName) {
+  const { sessionMeta, ...rest } = hit;
+  return {
+    ...rest,
+    sessionPath: file,
+    sessionId: sessionMeta.id,
+    sessionName: sessionMeta.name,
+    sessionPreview: sessionMeta.preview,
+    sessionCwd: sessionMeta.cwd,
+    harness: sessionMeta.harness,
+    folder: folderName,
+    folderLabel: decodeFolderName(folderName),
+  };
+}
+
 export function searchSessions({ q, scope, path, includeTools = false, defaultDir = null } = {}, maxResults = 200) {
   const parsedQuery = parseSearchQuery(q);
   const { terms } = parsedQuery;
   if (!terms.length) return { results: [], truncated: false, filesSearched: 0 };
   const resultLimit = Number.isSafeInteger(maxResults) && maxResults >= 0 ? maxResults : 0;
-  const files = [];
-  if (scope === "session") {
-    if (typeof path === "string" && path) files.push(path);
-  } else {
-    const dirs = scope === "all"
-      ? listSessionFolders().map((f) => f.dir)
-      : [path || defaultDir];
-    for (const dir of dirs) {
-      if (!dir || !existsSync(dir)) continue;
-      for (const f of jsonlFileNames(dir)) files.push(join(dir, f));
-    }
-  }
+  const files = filesForSearchScope({ scope, path, defaultDir });
   // newest first
   files.sort().reverse();
   const results = [];
@@ -366,18 +381,7 @@ export function searchSessions({ q, scope, path, includeTools = false, defaultDi
     const folderName = basename(dirname(file));
     for (const h of hits) {
       if (results.length >= resultLimit) { truncated = true; break; }
-      const { sessionMeta, ...rest } = h;
-      results.push({
-        ...rest,
-        sessionPath: file,
-        sessionId: sessionMeta.id,
-        sessionName: sessionMeta.name,
-        sessionPreview: sessionMeta.preview,
-        sessionCwd: sessionMeta.cwd,
-        harness: sessionMeta.harness,
-        folder: folderName,
-        folderLabel: decodeFolderName(folderName),
-      });
+      results.push(searchResultFromHit(h, file, folderName));
     }
     if (truncated) break;
   }
@@ -385,6 +389,14 @@ export function searchSessions({ q, scope, path, includeTools = false, defaultDi
 }
 
 // ---------------------------------------------------------------- tree views
+
+function treeNodeLabel(entry) {
+  if (entry.type === "message") return (labelOf(entry.message ?? {}) ?? "").slice(0, 200);
+  if (entry.type === "model_change") return `model → ${entry.modelId ?? "?"}`;
+  if (entry.type === "thinking_level_change") return `thinking → ${entry.thinkingLevel ?? "?"}`;
+  if (entry.type === "session_info") return `named: ${entry.name ?? ""}`;
+  return entry.type;
+}
 
 /** Parse a session .jsonl into tree nodes. Every entry has id/parentId, so
  *  forked conversations form real branches. */
@@ -401,19 +413,8 @@ export function sessionTree(path) {
       role: null,
       label: null,
     };
-    if (e.type === "message") {
-      const m = e.message ?? {};
-      node.role = m.role ?? null;
-      node.label = (labelOf(m) ?? "").slice(0, 200);
-    } else if (e.type === "model_change") {
-      node.label = `model → ${e.modelId ?? "?"}`;
-    } else if (e.type === "thinking_level_change") {
-      node.label = `thinking → ${e.thinkingLevel ?? "?"}`;
-    } else if (e.type === "session_info") {
-      node.label = `named: ${e.name ?? ""}`;
-    } else {
-      node.label = e.type;
-    }
+    if (e.type === "message") node.role = e.message?.role ?? null;
+    node.label = treeNodeLabel(e);
     nodes.push(node);
   }
   return {

@@ -110,6 +110,41 @@ export function createFileRoutes({ state, requestContext, logger = console } = {
   };
   const forbidden = (res, path) => json(res, 403, { error: `path outside the allowed roots: ${String(path ?? "")}` });
 
+  function validUploadName(name) {
+    return Boolean(name) && name !== "." && name !== ".." && !/[/\\]/.test(name);
+  }
+
+  function parseUploadRequest(url) {
+    const dir = resolveSafePath(resolve(String(url.searchParams.get("dir") ?? "")));
+    if (!dir) return { status: 403, forbiddenPath: url.searchParams.get("dir") };
+    const name = String(url.searchParams.get("name") ?? "").trim();
+    if (!validUploadName(name)) return { status: 400, body: { error: "invalid file name" } };
+    let dirOk = false;
+    try { dirOk = statSync(dir).isDirectory(); } catch {}
+    if (!dirOk) return { status: 400, body: { error: `not a directory: ${dir}` } };
+    const offset = Number(url.searchParams.get("offset") ?? 0);
+    if (!Number.isSafeInteger(offset) || offset < 0) return { status: 400, body: { error: "invalid offset" } };
+    return { dir, name, offset, last: url.searchParams.get("last") !== "0" };
+  }
+
+  async function readUploadChunk(req, offset) {
+    let buf;
+    try { buf = await readRawBody(req); }
+    catch (error) {
+      return { status: error?.code === "body_too_large" ? 413 : 400, body: { error: error?.code === "body_too_large" ? "upload chunk too large" : "upload body could not be read" } };
+    }
+    return Number.isSafeInteger(offset + buf.length) ? { buf } : { status: 400, body: { error: "invalid offset" } };
+  }
+
+  function sendUploadSuccess({ res, target, offset, buf, last }) {
+    if (!last) return json(res, 200, { received: offset + buf.length });
+    let bytes;
+    try { bytes = statSync(target).size; }
+    catch { return json(res, 500, { error: "upload finalization failed" }); }
+    log(`[oyster] file uploaded via explorer: ${target} (${bytes} bytes)`);
+    return json(res, 200, { saved: target, bytes });
+  }
+
   return {
     "GET /browse": (_req, res, url) => {
       const requestedPath = url.searchParams.get("path");
@@ -216,55 +251,16 @@ export function createFileRoutes({ state, requestContext, logger = console } = {
     },
 
     "POST /file-upload": async (req, res, url) => {
-      // chunked raw body upload:
-      //   ?dir=<target folder>&name=<file name>&offset=<byte offset>&last=<0|1>
-      // chunks must arrive in order; offset=0 starts a fresh upload, last=1 finalizes.
-      // single-shot uploads (no offset/last params) behave as before.
-      const dir = resolveSafePath(resolve(String(url.searchParams.get("dir") ?? "")));
-      if (!dir) { forbidden(res, url.searchParams.get("dir")); return; }
-      const name = String(url.searchParams.get("name") ?? "").trim();
-      if (!name || name === "." || name === ".." || /[/\\]/.test(name)) {
-        json(res, 400, { error: "invalid file name" });
-        return;
-      }
-      let dirOk = false;
-      try { dirOk = statSync(dir).isDirectory(); } catch {}
-      if (!dirOk) { json(res, 400, { error: `not a directory: ${dir}` }); return; }
-      cleanupStaleUploads(dir);
-      const offset = Number(url.searchParams.get("offset") ?? 0);
-      const last = url.searchParams.get("last") !== "0"; // default: single-shot = final
-      if (!Number.isSafeInteger(offset) || offset < 0) {
-        json(res, 400, { error: "invalid offset" });
-        return;
-      }
-      let buf;
-      try { buf = await readRawBody(req); }
-      catch (error) {
-        json(res, error?.code === "body_too_large" ? 413 : 400, {
-          error: error?.code === "body_too_large" ? "upload chunk too large" : "upload body could not be read",
-        });
-        return;
-      }
-      if (!Number.isSafeInteger(offset + buf.length)) {
-        json(res, 400, { error: "invalid offset" });
-        return;
-      }
-      const target = join(dir, name);
-      const tmp = uploadTempPath(dir, name, offset);
-      const uploadResponse = applyUploadChunk({ tmp, target, offset, buf, last });
-      if (uploadResponse) {
-        json(res, uploadResponse.status, uploadResponse.body);
-        return;
-      }
-      if (last) {
-        let bytes;
-        try { bytes = statSync(target).size; }
-        catch { json(res, 500, { error: "upload finalization failed" }); return; }
-        log(`[oyster] file uploaded via explorer: ${target} (${bytes} bytes)`);
-        json(res, 200, { saved: target, bytes });
-      } else {
-        json(res, 200, { received: offset + buf.length });
-      }
+      const upload = parseUploadRequest(url);
+      if (upload.forbiddenPath !== undefined) { forbidden(res, upload.forbiddenPath); return; }
+      if (upload.body) { json(res, upload.status, upload.body); return; }
+      cleanupStaleUploads(upload.dir);
+      const chunk = await readUploadChunk(req, upload.offset);
+      if (chunk.body) { json(res, chunk.status, chunk.body); return; }
+      const target = join(upload.dir, upload.name);
+      const uploadResponse = applyUploadChunk({ tmp: uploadTempPath(upload.dir, upload.name, upload.offset), target, offset: upload.offset, buf: chunk.buf, last: upload.last });
+      if (uploadResponse) { json(res, uploadResponse.status, uploadResponse.body); return; }
+      sendUploadSuccess({ res, target, offset: upload.offset, buf: chunk.buf, last: upload.last });
     },
 
     "POST /mkdir": async (req, res) => {
