@@ -1,22 +1,25 @@
 import { randomBytes as nodeRandomBytes } from "node:crypto";
-const MAGIC_1000 = 1000;
-const MAGIC_1024 = 1024;
-const MAGIC_15 = 15;
-const MAGIC_16 = 16;
-const MAGIC_256 = 256;
-const MAGIC_32 = 32;
-const MAGIC_4 = 4;
-const MAGIC_5 = 5;
-const MAGIC_60 = 60;
-const MAGIC_64 = 64;
-const MAGIC_8 = 8;
+const BYTES_PER_KIBIBYTE = 1024;
+const DEFAULT_INACTIVITY_MINUTES = 15;
+const DEFAULT_TERMINAL_RETENTION_MINUTES = 5;
+const FLOW_ID_HEX_LENGTH = 64;
+const MAX_ACTIVE_FLOWS_LIMIT = 32;
+const MAX_RESTART_RUNNER_IDS = 1000;
+const MAX_RESPONSE_KIBIBYTES = 32;
+const MAX_RUNNER_ID_LENGTH = 256;
+const MAX_TEXT_KIBIBYTES = 4;
+const MAX_URL_KIBIBYTES = 16;
+const MILLISECONDS_PER_SECOND = 1000;
+const OAUTH_ID_GENERATION_ATTEMPTS = 8;
+const REQUEST_ID_RANDOM_BYTES = 32;
+const SECONDS_PER_MINUTE = 60;
 
 
 const ACTIVE_STATUS = "pending";
 const MAX_PROVIDER_LENGTH = 256;
-const MAX_URL_LENGTH = MAGIC_16 * MAGIC_1024;
-const MAX_TEXT_LENGTH = MAGIC_4 * MAGIC_1024;
-const MAX_RESPONSE_LENGTH = MAGIC_32 * MAGIC_1024;
+const MAX_URL_LENGTH = MAX_URL_KIBIBYTES * BYTES_PER_KIBIBYTE;
+const MAX_TEXT_LENGTH = MAX_TEXT_KIBIBYTES * BYTES_PER_KIBIBYTE;
+const MAX_RESPONSE_LENGTH = MAX_RESPONSE_KIBIBYTES * BYTES_PER_KIBIBYTE;
 const MAX_OPTIONS = 32;
 const SAFE_FAILURE_CODES = new Set([
   "credential_busy",
@@ -62,9 +65,9 @@ function validateOAuthFlowDependencies({ registry, credentialService, restartAct
   for (const [fn, label] of [[restartActiveRunners, "restartActiveRunners"], [randomBytes, "randomBytes"], [now, "now"]]) {
     if (typeof fn !== "function") throw new TypeError(`${label} is required`);
   }
-  requireSafeIntegerRange(maxActiveFlows, 1, MAGIC_32, "maxActiveFlows must be an integer from 1 to 32");
-  requireSafeIntegerRange(inactivityMs, MAGIC_1000, MAGIC_60 * MAGIC_60 * MAGIC_1000, "inactivityMs must be an integer from 1000 to 3600000");
-  requireSafeIntegerRange(terminalRetentionMs, 0, MAGIC_60 * MAGIC_60 * MAGIC_1000, "terminalRetentionMs must be an integer from 0 to 3600000");
+  requireSafeIntegerRange(maxActiveFlows, 1, MAX_ACTIVE_FLOWS_LIMIT, "maxActiveFlows must be an integer from 1 to 32");
+  requireSafeIntegerRange(inactivityMs, MILLISECONDS_PER_SECOND, SECONDS_PER_MINUTE * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND, "inactivityMs must be an integer from 1000 to 3600000");
+  requireSafeIntegerRange(terminalRetentionMs, 0, SECONDS_PER_MINUTE * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND, "terminalRetentionMs must be an integer from 0 to 3600000");
   if (typeof setTimer !== "function" || typeof clearTimer !== "function") throw new TypeError("timer functions are required");
 }
 
@@ -79,8 +82,8 @@ export function createPiOAuthFlowService({
   randomBytes = nodeRandomBytes,
   now = Date.now,
   maxActiveFlows = 4,
-  inactivityMs = MAGIC_15 * MAGIC_60 * MAGIC_1000,
-  terminalRetentionMs = MAGIC_5 * MAGIC_60 * MAGIC_1000,
+  inactivityMs = DEFAULT_INACTIVITY_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND,
+  terminalRetentionMs = DEFAULT_TERMINAL_RETENTION_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND,
   setTimer = setTimeout,
   clearTimer = clearTimeout,
 } = {}) {
@@ -106,10 +109,10 @@ export function createPiOAuthFlowService({
 
   function safeRestart(value) {
     const runnerIds = Array.isArray(value?.runnerIds)
-      ? value.runnerIds.filter((id) => typeof id === "string" && id.length <= MAGIC_256).slice(0, MAGIC_1000)
+      ? value.runnerIds.filter((id) => typeof id === "string" && id.length <= MAX_RUNNER_ID_LENGTH).slice(0, MAX_RESTART_RUNNER_IDS)
       : [];
     const failedRunnerIds = Array.isArray(value?.failedRunnerIds)
-      ? value.failedRunnerIds.filter((id) => runnerIds.includes(id)).slice(0, MAGIC_1000)
+      ? value.failedRunnerIds.filter((id) => runnerIds.includes(id)).slice(0, MAX_RESTART_RUNNER_IDS)
       : [];
     const status = value?.status === "restarted" || value?.status === "partial" ? value.status : "failed";
     return Object.freeze({
@@ -158,13 +161,13 @@ export function createPiOAuthFlowService({
   }
 
   function createRandomId(isUsed) {
-    for (let attempt = 0; attempt < MAGIC_8; attempt += 1) {
-      const bytes = randomBytes(MAGIC_32);
+    for (let attempt = 0; attempt < OAUTH_ID_GENERATION_ATTEMPTS; attempt += 1) {
+      const bytes = randomBytes(REQUEST_ID_RANDOM_BYTES);
       if (!Buffer.isBuffer(bytes) && !(bytes instanceof Uint8Array)) {
         throw flowError("credential_service_unavailable", "secure OAuth flow IDs are unavailable");
       }
       const id = Buffer.from(bytes).toString("hex");
-      if (id.length === MAGIC_64 && !isUsed(id)) return id;
+      if (id.length === FLOW_ID_HEX_LENGTH && !isUsed(id)) return id;
     }
     throw flowError("credential_service_unavailable", "could not allocate an OAuth flow ID");
   }
@@ -229,7 +232,7 @@ export function createPiOAuthFlowService({
         const intervalSeconds = info?.intervalSeconds;
         const expiresInSeconds = info?.expiresInSeconds;
         flow.deviceCode = {
-          userCode: boundedText(info?.userCode, "device code", MAGIC_1024),
+          userCode: boundedText(info?.userCode, "device code", BYTES_PER_KIBIBYTE),
           verificationUri: safeUrl(info?.verificationUri, "device verification URL"),
           ...(Number.isSafeInteger(intervalSeconds) && intervalSeconds >= 0 ? { intervalSeconds } : {}),
           ...(Number.isSafeInteger(expiresInSeconds) && expiresInSeconds >= 0 ? { expiresInSeconds } : {}),
@@ -247,8 +250,8 @@ export function createPiOAuthFlowService({
           throw flowError("oauth_invalid_callback", "OAuth selection options are invalid");
         }
         const options = prompt.options.map((option) => Object.freeze({
-          id: boundedText(option?.id, "selection option ID", MAGIC_1024),
-          label: boundedText(option?.label, "selection option label", MAGIC_1024),
+          id: boundedText(option?.id, "selection option ID", BYTES_PER_KIBIBYTE),
+          label: boundedText(option?.label, "selection option label", BYTES_PER_KIBIBYTE),
         }));
         return pendingRequest(flow, {
           kind: "select",

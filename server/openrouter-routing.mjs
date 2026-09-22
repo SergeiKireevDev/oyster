@@ -1,7 +1,7 @@
 import { readFileSync, mkdirSync, symlinkSync, lstatSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
-const MAGIC_1024 = 1024;
-const MAGIC_16 = 16;
+const BYTES_PER_KIBIBYTE = 1024;
+const MAX_KEY_KIBIBYTES = 16;
 
 
 export const OPENROUTER_HARNESSES = Object.freeze(["codex", "claude-code"]);
@@ -17,7 +17,7 @@ export const CODEX_OPENROUTER_ARGS = Object.freeze([
 export function resolveOpenRouterKey({ authPath, env = process.env } = {}) {
   let entry;
   try { entry = JSON.parse(readFileSync(authPath, "utf8"))?.openrouter; } catch { /* no saved key */ }
-  const valid = (value) => typeof value === "string" && value.trim() && !/[\r\n\0]/u.test(value) && value.length <= MAGIC_16 * MAGIC_1024 && !value.trim().startsWith("!");
+  const valid = (value) => typeof value === "string" && value.trim() && !/[\r\n\0]/u.test(value) && value.length <= MAX_KEY_KIBIBYTES * BYTES_PER_KIBIBYTE && !value.trim().startsWith("!");
   if (entry?.type === "api_key" && valid(entry.key)) return entry.key.trim();
   return valid(env.OPENROUTER_API_KEY) ? env.OPENROUTER_API_KEY.trim() : null;
 }

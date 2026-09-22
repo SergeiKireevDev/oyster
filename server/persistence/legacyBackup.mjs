@@ -1,5 +1,5 @@
 import { chmodSync, existsSync, lstatSync, renameSync } from "node:fs";
-const MAGIC_OCTAL_555 = 0o555;
+const READ_EXECUTE_MODE_MASK = 0o555;
 
 
 /**
@@ -42,7 +42,7 @@ export function retainLegacyFileAsReadOnlyBackup({
     }
     // Remove write access without granting read access or discarding executable
     // permissions that may be needed when a routine script is restored.
-    chmod(backupPath, sourceStat.mode & MAGIC_OCTAL_555);
+    chmod(backupPath, sourceStat.mode & READ_EXECUTE_MODE_MASK);
   } catch (error) {
     try {
       rename(backupPath, sourcePath);

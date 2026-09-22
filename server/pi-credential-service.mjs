@@ -2,9 +2,9 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { refreshAnthropicOAuthGrant } from "./claude-oauth-credential-sink.mjs";
-const MAGIC_1000 = 1000;
-const MAGIC_30 = 30;
-const MAGIC_60 = 60;
+const MILLISECONDS_PER_SECOND = 1000;
+const DEFAULT_ROTATION_MARGIN_MINUTES = 30;
+const SECONDS_PER_MINUTE = 60;
 
 
 const CAPABILITY_ERROR = "credential_service_unavailable";
@@ -12,7 +12,7 @@ const ANTHROPIC = "anthropic";
 const OPENAI_CODEX = "openai-codex";
 const GEMINI_CLI = "google-gemini-cli";
 const AMP = "amp";
-const DEFAULT_ROTATION_MARGIN_MS = MAGIC_30 * MAGIC_60 * MAGIC_1000;
+const DEFAULT_ROTATION_MARGIN_MS = DEFAULT_ROTATION_MARGIN_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
 const HARNESS_CLAUDE_CODE = "claude-code";
 const PI_AUTH_STORAGE_LOAD_ERROR = "configured pi auth storage could not be loaded";
 const UNSUPPORTED_CREDENTIAL_ENTRY_ERROR = "configured pi auth storage contains an unsupported credential entry";

@@ -1,6 +1,6 @@
-const MAGIC_120 = 120;
-const MAGIC_200 = 200;
-const MAGIC_25 = 25;
+const SESSION_PREVIEW_MAX_CHARS = 120;
+const ENTRY_LABEL_MAX_CHARS = 200;
+const MAX_SEARCH_HITS = 25;
 
 /**
  * oyster — session file access
@@ -200,7 +200,7 @@ export function summarizeSessionFile(path) {
     harness: "pi",
     cwd: header?.cwd ?? null,
     parentSession: header?.parentSession ?? null,
-    preview: firstUserText?.slice(0, MAGIC_120) ?? null,
+    preview: firstUserText?.slice(0, SESSION_PREVIEW_MAX_CHARS) ?? null,
     messageCount,
   };
 }
@@ -310,7 +310,7 @@ function isDefaultSearchText(part) {
 function searchEntry(entry, { terms, operator, includeTools, meta }) {
   const hits = [];
   for (const part of entryTexts(entry)) {
-    if (!meta.preview && part.role === "user" && part.kind === "text") meta.preview = part.text.slice(0, MAGIC_120);
+    if (!meta.preview && part.role === "user" && part.kind === "text") meta.preview = part.text.slice(0, SESSION_PREVIEW_MAX_CHARS);
     if (!includeTools && !isDefaultSearchText(part)) continue;
     const match = matchSearchText(part.text, terms, operator);
     if (!match) continue;
@@ -380,7 +380,7 @@ export function searchSessions({ q, scope, path, includeTools = false, defaultDi
   const results = [];
   let truncated = false;
   for (const file of files) {
-    const hits = searchSessionFile(file, parsedQuery, MAGIC_25, includeTools);
+    const hits = searchSessionFile(file, parsedQuery, MAX_SEARCH_HITS, includeTools);
     if (!hits.length) continue;
     const folderName = basename(dirname(file));
     for (const h of hits) {
@@ -395,7 +395,7 @@ export function searchSessions({ q, scope, path, includeTools = false, defaultDi
 // ---------------------------------------------------------------- tree views
 
 function treeNodeLabel(entry) {
-  if (entry.type === "message") return (labelOf(entry.message ?? {}) ?? "").slice(0, MAGIC_200);
+  if (entry.type === "message") return (labelOf(entry.message ?? {}) ?? "").slice(0, ENTRY_LABEL_MAX_CHARS);
   if (entry.type === "model_change") return `model → ${entry.modelId ?? "?"}`;
   if (entry.type === "thinking_level_change") return `thinking → ${entry.thinkingLevel ?? "?"}`;
   if (entry.type === "session_info") return `named: ${entry.name ?? ""}`;
@@ -452,7 +452,7 @@ export function sessionEntries(path) {
     if (e.type !== "message") continue;
     const m = e.message ?? {};
     if (m.role !== "user" && m.role !== "assistant") continue;
-    out.push({ id: e.id, role: m.role, text: (labelOf(m) ?? "").slice(0, MAGIC_200), timestamp: e.timestamp ?? null });
+    out.push({ id: e.id, role: m.role, text: (labelOf(m) ?? "").slice(0, ENTRY_LABEL_MAX_CHARS), timestamp: e.timestamp ?? null });
   }
   return { sessionId: header?.id ?? null, leafId, entries: out };
 }

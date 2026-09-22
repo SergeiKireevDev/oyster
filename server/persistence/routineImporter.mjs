@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-const MAGIC_OCTAL_111 = 0o111;
+const EXECUTABLE_MODE_MASK = 0o111;
 const ROUTINE_BINDINGS_FILE = "bindings.json";
 
 
@@ -86,7 +86,7 @@ function legacyRoutineCandidate(entry, { sourceDir, resolvedBindingsPath, normal
   } catch (error) {
     throw new Error(`cannot inspect legacy routine ${sourcePath}: ${error.message}`, { cause: error });
   }
-  if (!metadata.isFile() || !(metadata.mode & MAGIC_OCTAL_111)) return null;
+  if (!metadata.isFile() || !(metadata.mode & EXECUTABLE_MODE_MASK)) return null;
   return Object.freeze({
     name: entry.name,
     sourcePath,

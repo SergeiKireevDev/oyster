@@ -1,5 +1,5 @@
-const MAGIC_200 = 200;
-const MAGIC_429 = 429;
+const HTTP_OK = 200;
+const HTTP_TOO_MANY_REQUESTS = 429;
 
 const PERSISTENT_STORES = new Set(["jsonl", "sqlite"]);
 
@@ -69,7 +69,7 @@ export function createOpenRoutes(options = {}) {
       disableCaching(res);
       text(
         res,
-        MAGIC_200,
+        HTTP_OK,
         `globalThis.__OYSTER_RUNTIME_CONFIG__ = Object.freeze(${JSON.stringify({
           unauthenticated: Boolean(state.config.UNAUTHENTICATED),
           harnesses: runnerHarnesses(),
@@ -80,7 +80,7 @@ export function createOpenRoutes(options = {}) {
 
     "GET /health": (_req, res) => {
       disableCaching(res);
-      json(res, MAGIC_200, {
+      json(res, HTTP_OK, {
         ok: true,
         // This endpoint is public. Keep operationally useful process state,
         // but never publish runner IDs, session references, or filesystem paths.
@@ -97,14 +97,14 @@ export function createOpenRoutes(options = {}) {
     "GET /authcheck": (req, res, url) => {
       disableCaching(res);
       if (state.config.UNAUTHENTICATED) {
-        json(res, MAGIC_200, { authorized: true, unauthenticated: true });
+        json(res, HTTP_OK, { authorized: true, unauthenticated: true });
         return;
       }
       const ip = clientIp(req);
       const failures = recentAuthFailures(ip);
       if (!Array.isArray(failures)) throw new TypeError("recentAuthFailures must return an array");
       if (failures.length >= authFailMax) {
-        json(res, MAGIC_429, { error: "too many auth failures — try again later" });
+        json(res, HTTP_TOO_MANY_REQUESTS, { error: "too many auth failures — try again later" });
         return;
       }
       const candidates = authCandidates(req, url);
@@ -125,7 +125,7 @@ export function createOpenRoutes(options = {}) {
       }
       if (authorized) state.authFails?.delete(ip);
       else if (credentialPresent) recordAuthFailure(ip);
-      json(res, MAGIC_200, { authorized, credentials });
+      json(res, HTTP_OK, { authorized, credentials });
     },
   };
 }

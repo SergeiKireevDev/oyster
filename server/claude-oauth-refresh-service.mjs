@@ -1,6 +1,6 @@
-const MAGIC_1000 = 1000;
-const MAGIC_30 = 30;
-const MAGIC_60 = 60;
+const MILLISECONDS_PER_SECOND = 1000;
+const DEFAULT_MARGIN_MINUTES = 30;
+const SECONDS_PER_MINUTE = 60;
 
 /**
  * oyster — Anthropic OAuth token upkeep
@@ -16,8 +16,8 @@ const MAGIC_60 = 60;
  * still reports an OAuth failure triggers the same recovery on demand.
  */
 
-const DEFAULT_MARGIN_MS = MAGIC_30 * MAGIC_60 * MAGIC_1000;
-const DEFAULT_INTERVAL_MS = MAGIC_60 * MAGIC_1000;
+const DEFAULT_MARGIN_MS = DEFAULT_MARGIN_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
+const DEFAULT_INTERVAL_MS = SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
 
 import { errorMessage } from "./errors.mjs";
 import { assertFunction as requireFunction } from "./validation.mjs";

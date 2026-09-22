@@ -1,11 +1,11 @@
-const MAGIC_1024 = 1024;
-const MAGIC_200 = 200;
-const MAGIC_201 = 201;
-const MAGIC_400 = 400;
-const MAGIC_503 = 503;
-const MAGIC_8 = 8;
+const BYTES_PER_KIBIBYTE = 1024;
+const HTTP_OK = 200;
+const HTTP_CREATED = 201;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_SERVICE_UNAVAILABLE = 503;
+const MAX_ENDPOINT_KIBIBYTES = 8;
 
-const MAX_ENDPOINT_BYTES = MAGIC_8 * MAGIC_1024;
+const MAX_ENDPOINT_BYTES = MAX_ENDPOINT_KIBIBYTES * BYTES_PER_KIBIBYTE;
 const MAX_KEY_BYTES = 512;
 
 function validEndpoint(endpoint) {
@@ -29,26 +29,26 @@ export function createPushRoutes({ requestContext, pushService } = {}) {
   if (!requestContext || !pushService) throw new TypeError("push route dependencies are required");
   const { json, readJsonBody } = requestContext;
   return {
-    "GET /push/config": (_req, res) => json(res, MAGIC_200, { publicKey: pushService.publicKey }),
+    "GET /push/config": (_req, res) => json(res, HTTP_OK, { publicKey: pushService.publicKey }),
     "POST /push/subscription": async (req, res) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
-      if (!validSubscription(body)) { json(res, MAGIC_400, { error: "valid Web Push subscription required" }); return; }
+      if (!validSubscription(body)) { json(res, HTTP_BAD_REQUEST, { error: "valid Web Push subscription required" }); return; }
       try {
         await pushService.subscribe(body);
-        json(res, MAGIC_201, { subscribed: true });
+        json(res, HTTP_CREATED, { subscribed: true });
       } catch (error) {
-        json(res, MAGIC_503, { error: error?.message ?? "Web Push is unavailable" });
+        json(res, HTTP_SERVICE_UNAVAILABLE, { error: error?.message ?? "Web Push is unavailable" });
       }
     },
     "DELETE /push/subscription": async (req, res) => {
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
       if (typeof body.endpoint !== "string" || !body.endpoint.startsWith("https://") || Buffer.byteLength(body.endpoint) > MAX_ENDPOINT_BYTES) {
-        json(res, MAGIC_400, { error: "valid Web Push endpoint required" }); return;
+        json(res, HTTP_BAD_REQUEST, { error: "valid Web Push endpoint required" }); return;
       }
       await pushService.unsubscribe(body.endpoint);
-      json(res, MAGIC_200, { subscribed: false });
+      json(res, HTTP_OK, { subscribed: false });
     },
   };
 }

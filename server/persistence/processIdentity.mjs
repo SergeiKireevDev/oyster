@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, readlinkSync } from "node:fs";
-const MAGIC_19 = 19;
-const MAGIC_20 = 20;
+const PROC_STAT_START_TIME_FIELD = 19;
+const MIN_PROC_STAT_FIELD_COUNT = 20;
 
 
 import { requireFunction } from "../validation.mjs";
@@ -31,12 +31,12 @@ function parseProcStat(stat, pid) {
   }
   // The suffix begins at field 3 (state); pgrp and starttime are fields 5 and 22.
   const fields = stat.slice(close + 2).trim().split(/\s+/);
-  if (fields.length < MAGIC_20 || !/^[A-Za-z]$/.test(fields[0])) {
+  if (fields.length < MIN_PROC_STAT_FIELD_COUNT || !/^[A-Za-z]$/.test(fields[0])) {
     return { processGroupId: null, procStartTicks: null };
   }
   return {
     processGroupId: positiveSafeInteger(fields[2]),
-    procStartTicks: positiveDecimal(fields[MAGIC_19]),
+    procStartTicks: positiveDecimal(fields[PROC_STAT_START_TIME_FIELD]),
   };
 }
 

@@ -4,31 +4,34 @@ import { chmodSync, createReadStream, existsSync, lstatSync, mkdirSync, readFile
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { promisify } from "node:util";
-const MAGIC_10 = 10;
-const MAGIC_100 = 100;
-const MAGIC_1000 = 1000;
-const MAGIC_1024 = 1024;
-const MAGIC_16 = 16;
-const MAGIC_200 = 200;
-const MAGIC_201 = 201;
-const MAGIC_206 = 206;
-const MAGIC_256 = 256;
-const MAGIC_30_000 = 30_000;
-const MAGIC_304 = 304;
-const MAGIC_4 = 4;
-const MAGIC_400 = 400;
-const MAGIC_409 = 409;
-const MAGIC_416 = 416;
-const MAGIC_5 = 5;
-const MAGIC_500 = 500;
-const MAGIC_599 = 599;
-const MAGIC_64 = 64;
-const MAGIC_8_000 = 8_000;
-const MAGIC_8_192 = 8_192;
-const MAGIC_80 = 80;
-const MAGIC_9 = 9;
-const MAGIC_NEG_2 = -2;
-const MAGIC_OCTAL_700 = 0o700;
+const BYTES_PER_KIBIBYTE = 1024;
+const CACHE_TEMPORARY_SUFFIX_BYTES = 4;
+const CONVERTED_VIDEO_MAX_BUFFER_MIBIBYTES = 10;
+const CRLF_TRIM_END_INDEX = -2;
+const GROUP_NAME_MAX_CHARS = 80;
+const HTTP_CLIENT_ERROR_MIN = 400;
+const HTTP_CONFLICT = 409;
+const HTTP_CREATED = 201;
+const HTTP_INTERNAL_SERVER_ERROR = 500;
+const HTTP_NOT_MODIFIED = 304;
+const HTTP_OK = 200;
+const HTTP_PARTIAL_CONTENT = 206;
+const HTTP_RANGE_NOT_SATISFIABLE = 416;
+const HTTP_SERVER_ERROR_MAX = 599;
+const ID_RANDOM_BYTES = 9;
+const LABEL_MAX_CHARS = 200;
+const MAX_ERROR_DETAIL_CHARS = 1000;
+const MAX_URL_CHARS = 8_192;
+const MONITOR_CONTENT_LIMIT_MIBIBYTES = 5;
+const MONITOR_CONTENT_TIMEOUT_MS = 30_000;
+const MONITOR_CWD_METADATA_LIMIT_KIBIBYTES = 16;
+const MONITOR_PREVIEW_LIMIT_KIBIBYTES = 64;
+const MONITOR_PREVIEW_TIMEOUT_MS = 8_000;
+const MONITOR_SCRIPT_LIMIT_KIBIBYTES = 256;
+const PRIVATE_DIRECTORY_MODE = 0o700;
+const SESSION_ID_MAX_CHARS = 100;
+const TEXT_ARTIFACT_MAX_MIBIBYTES = 5;
+const VIDEO_CONVERSION_ERROR_MAX_CHARS = 500;
 const CONTENT_SCRIPT_FILE = "content.sh";
 const DIFF_MIME_TYPE = "text/x-diff";
 const NO_SUCH_PINNED_WIDGET_ERROR = "no such pinned widget";
@@ -51,13 +54,13 @@ const execFileAsync = promisify(execFile);
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown", ".mdown", ".mkd"]);
 const HTML_EXTENSIONS = new Set([".html", ".htm"]);
 const INLINE_KINDS = new Set(["image", "video"]);
-const MONITOR_PREVIEW_LIMIT = MAGIC_64 * MAGIC_1024;
-const MONITOR_CONTENT_LIMIT = MAGIC_5 * MAGIC_1024 * MAGIC_1024;
+const MONITOR_PREVIEW_LIMIT = MONITOR_PREVIEW_LIMIT_KIBIBYTES * BYTES_PER_KIBIBYTE;
+const MONITOR_CONTENT_LIMIT = MONITOR_CONTENT_LIMIT_MIBIBYTES * BYTES_PER_KIBIBYTE * BYTES_PER_KIBIBYTE;
 const MONITOR_PREVIEW_CHARACTERS = 20;
 const GRAPHEME_SEGMENTER = new Intl.Segmenter("en", { granularity: "grapheme" });
 
 function id(prefix) {
-  return `${prefix}-${randomBytes(MAGIC_9).toString("base64url")}`;
+  return `${prefix}-${randomBytes(ID_RANDOM_BYTES).toString("base64url")}`;
 }
 
 export function classifyPinnedPath(path, stat = statSync(path)) {
@@ -86,7 +89,7 @@ async function scopeIdentity(body, ensureSessionOwner) {
     // Preserve the legacy default for callers that omit both scope and sessionId.
     return { scope: "workspace", ownerId: null, sessionId: null };
   }
-  if (sessionId.length > MAGIC_100) throw Object.assign(new Error("sessionId is too long"), { statusCode: 400 });
+  if (sessionId.length > SESSION_ID_MAX_CHARS) throw Object.assign(new Error("sessionId is too long"), { statusCode: 400 });
   const owner = await ensureSessionOwner(sessionId);
   if (!owner) throw Object.assign(new Error("unknown session for pinned widget"), { statusCode: 404 });
   return { scope: "session", ownerId: owner.id, sessionId };
@@ -220,7 +223,7 @@ export async function ensurePinnedHublot(state, hublot) {
     ownerId: hublot.owner_id ?? null,
     scope,
     kind: "live_interface",
-    label: String(hublot.label || "Live interface").trim().slice(0, MAGIC_200),
+    label: String(hublot.label || "Live interface").trim().slice(0, LABEL_MAX_CHARS),
     position: await repository.nextPosition({ ownerId: hublot.owner_id ?? null, scope }),
     hublotId: hublot.id,
     createdAt: hublot.created_at ?? now,
@@ -229,7 +232,7 @@ export async function ensurePinnedHublot(state, hublot) {
 }
 
 function normalizeLabel(value, fallback) {
-  const label = String(value ?? fallback ?? "").trim().slice(0, MAGIC_200);
+  const label = String(value ?? fallback ?? "").trim().slice(0, LABEL_MAX_CHARS);
   if (!label) throw Object.assign(new Error("widget label is required"), { statusCode: 400 });
   return label;
 }
@@ -302,10 +305,10 @@ function assertRequestBody(body) {
 function sendError(json, res, error) {
   const explicitStatus = Number(error?.statusCode);
   const constraintViolation = String(error?.code ?? "").startsWith("SQLITE_CONSTRAINT");
-  const status = Number.isInteger(explicitStatus) && explicitStatus >= MAGIC_400 && explicitStatus <= MAGIC_599
+  const status = Number.isInteger(explicitStatus) && explicitStatus >= HTTP_CLIENT_ERROR_MIN && explicitStatus <= HTTP_SERVER_ERROR_MAX
     ? explicitStatus
-    : constraintViolation ? MAGIC_409 : MAGIC_500;
-  const message = status === MAGIC_500
+    : constraintViolation ? HTTP_CONFLICT : HTTP_INTERNAL_SERVER_ERROR;
+  const message = status === HTTP_INTERNAL_SERVER_ERROR
     ? "internal server error"
     : constraintViolation && !Number.isInteger(explicitStatus)
       ? "request conflicts with existing pinned widget state"
@@ -350,7 +353,7 @@ function materializeUrlTarget(body) {
   catch (error) { throw Object.assign(new Error("pinned link must be a valid URL"), { statusCode: 400, cause: error }); }
   if (url.protocol !== "https:") throw Object.assign(new Error("only https links can be pinned"), { statusCode: 400 });
   if (url.username || url.password) throw Object.assign(new Error("pinned links cannot contain credentials"), { statusCode: 400 });
-  if (url.href.length > MAGIC_8_192) throw Object.assign(new Error("pinned link is too long"), { statusCode: 413 });
+  if (url.href.length > MAX_URL_CHARS) throw Object.assign(new Error("pinned link is too long"), { statusCode: 413 });
   return { kind: "link", target: url.href, mimeType: null, size: null, mtimeMs: null, fallbackLabel: url.hostname };
 }
 
@@ -485,7 +488,7 @@ export function materializeMonitoringScripts({ id: widgetId, previewScript, cont
   }
   for (const [name, script] of [["preview", previewScript], ["content", contentScript]]) {
     if (typeof script !== "string" || !script.startsWith("#!")) throw Object.assign(new Error(`${name} script must start with a shebang`), { statusCode: 400 });
-    if (Buffer.byteLength(script) > MAGIC_256 * MAGIC_1024) throw Object.assign(new Error(`${name} script is too large`), { statusCode: 413 });
+    if (Buffer.byteLength(script) > MONITOR_SCRIPT_LIMIT_KIBIBYTES * BYTES_PER_KIBIBYTE) throw Object.assign(new Error(`${name} script is too large`), { statusCode: 413 });
   }
   const target = join(root, widgetId);
   mkdirSync(root, { recursive: true, mode: 0o700 });
@@ -494,7 +497,7 @@ export function materializeMonitoringScripts({ id: widgetId, previewScript, cont
     for (const [name, script] of [[PREVIEW_SCRIPT_FILE, previewScript], [CONTENT_SCRIPT_FILE, contentScript]]) {
       const path = join(target, name);
       writeFileSync(path, script.endsWith("\n") ? script : `${script}\n`, { mode: 0o700, flag: "wx" });
-      chmodSync(path, MAGIC_OCTAL_700);
+      chmodSync(path, PRIVATE_DIRECTORY_MODE);
     }
     writeFileSync(join(target, "cwd"), String(cwd), { mode: 0o600, flag: "wx" });
     return target;
@@ -519,7 +522,7 @@ function monitoringTarget(row, resolveSafePath) {
 }
 
 function normalizeMonitoringCwd(value) {
-  if (value.endsWith("\r\n")) return value.slice(0, MAGIC_NEG_2);
+  if (value.endsWith("\r\n")) return value.slice(0, CRLF_TRIM_END_INDEX);
   if (value.endsWith("\n")) return value.slice(0, -1);
   return value;
 }
@@ -528,7 +531,7 @@ function readMonitoringCwd(target, resolveSafePath) {
   try {
     const cwdPath = join(target, "cwd");
     const cwdStat = statSync(cwdPath);
-    if (!cwdStat.isFile() || cwdStat.size > MAGIC_16 * MAGIC_1024) throw new Error("invalid monitoring cwd metadata");
+    if (!cwdStat.isFile() || cwdStat.size > MONITOR_CWD_METADATA_LIMIT_KIBIBYTES * BYTES_PER_KIBIBYTE) throw new Error("invalid monitoring cwd metadata");
     const cwdValue = normalizeMonitoringCwd(readFileSync(cwdPath, "utf8"));
     if (!cwdValue || /[\0\r\n]/.test(cwdValue)) throw new Error("invalid monitoring cwd metadata");
     const cwd = resolveSafePath(resolve(cwdValue));
@@ -542,7 +545,7 @@ function readMonitoringCwd(target, resolveSafePath) {
 function monitoringExecOptions(mode, cwd) {
   return {
     cwd,
-    timeout: mode === "content" ? MAGIC_30_000 : MAGIC_8_000,
+    timeout: mode === "content" ? MONITOR_CONTENT_TIMEOUT_MS : MONITOR_PREVIEW_TIMEOUT_MS,
     maxBuffer: mode === "content" ? MONITOR_CONTENT_LIMIT : MONITOR_PREVIEW_LIMIT,
     encoding: "utf8",
     env: { ...process.env, NO_COLOR: "1", TERM: "dumb" },
@@ -558,7 +561,7 @@ export async function runMonitoringScript(row, mode, { resolveSafePath, execFile
     const result = await execFileImpl(script, [], monitoringExecOptions(mode, cwd));
     return String(result?.stdout ?? "").replace(/\s+$/, "");
   } catch (error) {
-    const detail = String(error?.stderr || error?.message || error).trim().slice(0, MAGIC_1000);
+    const detail = String(error?.stderr || error?.message || error).trim().slice(0, MAX_ERROR_DETAIL_CHARS);
     throw Object.assign(new Error(`monitoring script failed${detail ? `: ${detail}` : ""}`), { statusCode: 422 });
   }
 }
@@ -578,7 +581,7 @@ export async function preparePinnedVideo(state, media, {
   if (!cacheStat.isDirectory()) {
     throw Object.assign(new Error("video conversion cache is unavailable"), { statusCode: 500 });
   }
-  chmodSync(cacheRoot, MAGIC_OCTAL_700);
+  chmodSync(cacheRoot, PRIVATE_DIRECTORY_MODE);
   const target = join(cacheRoot, `${fingerprint}.mp4`);
   const cached = () => {
     try {
@@ -593,21 +596,21 @@ export async function preparePinnedVideo(state, media, {
     const pending = transcodes.get(fingerprint);
     if (pending) await pending;
     else {
-      const temporary = `${target}.${process.pid}.${randomBytes(MAGIC_4).toString("hex")}.part`;
+      const temporary = `${target}.${process.pid}.${randomBytes(CACHE_TEMPORARY_SUFFIX_BYTES).toString("hex")}.part`;
       const task = (async () => {
         try {
           await execFileImpl(ffmpegBin, [
             "-hide_banner", "-loglevel", "error", "-y", "-i", media.target,
             "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "libx264", "-preset", "veryfast",
             "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "+faststart", "-f", "mp4", temporary,
-          ], { timeout: 120_000, maxBuffer: MAGIC_10 * MAGIC_1024 * MAGIC_1024 });
+          ], { timeout: 120_000, maxBuffer: CONVERTED_VIDEO_MAX_BUFFER_MIBIBYTES * BYTES_PER_KIBIBYTE * BYTES_PER_KIBIBYTE });
           if (!existsSync(temporary) || statSync(temporary).size === 0) throw new Error("video conversion produced no playable output");
           renameSync(temporary, target);
         } catch (error) {
           rmSync(temporary, { force: true });
           const unavailable = error?.code === "ENOENT"
             ? new Error("this video needs FFmpeg for browser playback, but FFmpeg is not installed")
-            : new Error(`video conversion failed: ${String(error?.stderr || error?.message || error).trim().slice(0, MAGIC_500)}`);
+            : new Error(`video conversion failed: ${String(error?.stderr || error?.message || error).trim().slice(0, VIDEO_CONVERSION_ERROR_MAX_CHARS)}`);
           unavailable.statusCode = 415;
           throw unavailable;
         }
@@ -663,7 +666,7 @@ export function createPinnedWidgetRoutes({
 
   return {
     "GET /pinned-widgets": async (_req, res, url) => {
-      json(res, MAGIC_200, await listPinnedWidgets(state, {
+      json(res, HTTP_OK, await listPinnedWidgets(state, {
         sessionId: url.searchParams.get("sessionId"),
         scope: ["all", "workspace"].includes(url.searchParams.get("scope")) ? url.searchParams.get("scope") : "session",
         resolveSafePath,
@@ -688,7 +691,7 @@ export function createPinnedWidgetRoutes({
           widgetId,
         });
         if (materialized.pinnedWidget) {
-          json(res, MAGIC_200, {
+          json(res, HTTP_OK, {
             widget: await pinnedWidgetDto(state, materialized.pinnedWidget, { resolveSafePath, activeTunnels: await listTunnels(state) }),
             ...await currentCollection(body),
           });
@@ -696,14 +699,14 @@ export function createPinnedWidgetRoutes({
         }
         const duplicate = await findDuplicatePinnedWidget(repository, identity, materialized);
         if (duplicate) {
-          json(res, MAGIC_200, { widget: await pinnedWidgetDto(state, duplicate, { resolveSafePath, activeTunnels: await listTunnels(state) }), ...await currentCollection(body) });
+          json(res, HTTP_OK, { widget: await pinnedWidgetDto(state, duplicate, { resolveSafePath, activeTunnels: await listTunnels(state) }), ...await currentCollection(body) });
           return;
         }
         const widget = await createPinnedWidgetRecord(repository, identity, materialized, body, widgetId);
         widgetCreated = true;
         const dto = await pinnedWidgetDto(state, widget, { resolveSafePath, activeTunnels: await listTunnels(state) });
         emit("pinned_widget_created", { widget: dto });
-        json(res, MAGIC_201, { widget: dto, ...await currentCollection(body) });
+        json(res, HTTP_CREATED, { widget: dto, ...await currentCollection(body) });
       } catch (error) {
         cleanupMaterializedTargetOnFailure(materialized, widgetCreated);
         sendError(json, res, error);
@@ -718,7 +721,7 @@ export function createPinnedWidgetRoutes({
         const updated = await patchPinnedWidget(body);
         const dto = await pinnedWidgetDto(state, updated, { resolveSafePath, activeTunnels: await listTunnels(state) });
         emit("pinned_widget_updated", { widget: dto });
-        json(res, MAGIC_200, { widget: dto, ...await currentCollection(body) });
+        json(res, HTTP_OK, { widget: dto, ...await currentCollection(body) });
       } catch (error) { sendError(json, res, error); }
     },
 
@@ -733,7 +736,7 @@ export function createPinnedWidgetRoutes({
           await normalizeContainer(repository, { scope: row.scope, ownerId: row.owner_id }, row.group_id);
         });
         emit("pinned_widget_deleted", { widgetId });
-        json(res, MAGIC_200, { unpinned: widgetId });
+        json(res, HTTP_OK, { unpinned: widgetId });
       } catch (error) { sendError(json, res, error); }
     },
 
@@ -745,11 +748,11 @@ export function createPinnedWidgetRoutes({
         const identity = await scopeIdentity(body, ensureSessionOwner);
         const now = new Date().toISOString();
         const group = await repository.createGroup({
-          id: id("group"), ...identity, name: normalizeLabel(body.name).slice(0, MAGIC_80),
+          id: id("group"), ...identity, name: normalizeLabel(body.name).slice(0, GROUP_NAME_MAX_CHARS),
           position: await repository.nextGroupPosition(identity), createdAt: now,
         });
         emit("pinned_widget_updated", { group });
-        json(res, MAGIC_201, { group, ...await currentCollection(body) });
+        json(res, HTTP_CREATED, { group, ...await currentCollection(body) });
       } catch (error) { sendError(json, res, error); }
     },
 
@@ -781,11 +784,11 @@ export function createPinnedWidgetRoutes({
               })));
             await normalizeGroupContainer(repository, oldIdentity);
           }
-          if (body.name !== undefined) await repository.updateGroup(group.id, { name: normalizeLabel(body.name).slice(0, MAGIC_80), updated_at: now });
+          if (body.name !== undefined) await repository.updateGroup(group.id, { name: normalizeLabel(body.name).slice(0, GROUP_NAME_MAX_CHARS), updated_at: now });
         });
         const updated = await repository.findGroup(group.id);
         emit("pinned_widget_updated", { group: updated });
-        json(res, MAGIC_200, { group: updated, ...await currentCollection(body) });
+        json(res, HTTP_OK, { group: updated, ...await currentCollection(body) });
       } catch (error) { sendError(json, res, error); }
     },
 
@@ -811,7 +814,7 @@ export function createPinnedWidgetRoutes({
           await normalizeContainer(repository, { scope: group.scope, ownerId: group.owner_id }, null);
         });
         emit("pinned_widget_updated", { groupId, deleted: true, deletedWidgetIds: deleteWidgets ? children.map((item) => item.id) : [] });
-        json(res, MAGIC_200, { deleted: groupId, deletedWidgets: deleteWidgets ? children.map((item) => item.id) : [] });
+        json(res, HTTP_OK, { deleted: groupId, deletedWidgets: deleteWidgets ? children.map((item) => item.id) : [] });
       } catch (error) { sendError(json, res, error); }
     },
 
@@ -820,7 +823,7 @@ export function createPinnedWidgetRoutes({
         const row = await repository.find(String(url.searchParams.get("id") ?? ""));
         if (!row) throw Object.assign(new Error(NO_SUCH_PINNED_WIDGET_ERROR), { statusCode: 404 });
         const preview = formatMonitoringPreview(await executeMonitor(row, "preview", { resolveSafePath }));
-        json(res, MAGIC_200, { id: row.id, preview });
+        json(res, HTTP_OK, { id: row.id, preview });
       } catch (error) { sendError(json, res, error); }
     },
 
@@ -829,7 +832,7 @@ export function createPinnedWidgetRoutes({
         const row = await repository.find(String(url.searchParams.get("id") ?? ""));
         if (!row) throw Object.assign(new Error(NO_SUCH_PINNED_WIDGET_ERROR), { statusCode: 404 });
         const content = await executeMonitor(row, "content", { resolveSafePath });
-        json(res, MAGIC_200, { id: row.id, content, format: row.mime_type === DIFF_MIME_TYPE ? "diff" : "text" });
+        json(res, HTTP_OK, { id: row.id, content, format: row.mime_type === DIFF_MIME_TYPE ? "diff" : "text" });
       } catch (error) { sendError(json, res, error); }
     },
 
@@ -845,15 +848,15 @@ export function createPinnedWidgetRoutes({
         if (classification.kind !== "markdown" || classification.mimeType !== row.mime_type) {
           throw Object.assign(new Error("pinned text type changed; re-pin it before display"), { statusCode: 415 });
         }
-        if (stat.size > MAGIC_5 * MAGIC_1024 * MAGIC_1024) throw Object.assign(new Error("text artifact is too large to display"), { statusCode: 413 });
-        json(res, MAGIC_200, { id: row.id, path: target, content: readFileSync(target, "utf8") });
+        if (stat.size > TEXT_ARTIFACT_MAX_MIBIBYTES * BYTES_PER_KIBIBYTE * BYTES_PER_KIBIBYTE) throw Object.assign(new Error("text artifact is too large to display"), { statusCode: 413 });
+        json(res, HTTP_OK, { id: row.id, path: target, content: readFileSync(target, "utf8") });
       } catch (error) { sendError(json, res, error); }
     },
 
     "GET /pinned-widget-html": async (req, res, url) => {
       try {
         const { target, stat, mimeType } = await htmlTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath);
-        res.writeHead(MAGIC_200, {
+        res.writeHead(HTTP_OK, {
           "content-type": mimeType,
           "content-length": stat.size,
           "cache-control": PRIVATE_NO_CACHE_HEADER,
@@ -874,14 +877,14 @@ export function createPinnedWidgetRoutes({
     "HEAD /pinned-widget-media": async (req, res, url) => {
       try {
         const { stat, mimeType } = await prepareVideo(state, await mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath, url.searchParams.get("src")));
-        res.writeHead(MAGIC_200, {
+        res.writeHead(HTTP_OK, {
           "content-type": mimeType, "content-length": stat.size, "accept-ranges": "bytes",
           "cache-control": PRIVATE_NO_CACHE_HEADER, "x-content-type-options": "nosniff",
         });
         res.end();
       } catch (error) {
         const status = Number(error?.statusCode);
-        res.writeHead(Number.isInteger(status) && status >= MAGIC_400 && status <= MAGIC_599 ? status : MAGIC_500);
+        res.writeHead(Number.isInteger(status) && status >= HTTP_CLIENT_ERROR_MIN && status <= HTTP_SERVER_ERROR_MAX ? status : HTTP_INTERNAL_SERVER_ERROR);
         res.end();
       }
     },
@@ -891,14 +894,14 @@ export function createPinnedWidgetRoutes({
         const { target, stat, mimeType, displayName } = await prepareVideo(state, await mediaTarget(state, String(url.searchParams.get("id") ?? ""), resolveSafePath, url.searchParams.get("src")));
         const etag = `W/"${stat.size}-${Math.trunc(stat.mtimeMs)}"`;
         if (!req.headers.range && req.headers["if-none-match"] === etag) {
-          res.writeHead(MAGIC_304, { etag, "cache-control": PRIVATE_NO_CACHE_HEADER });
+          res.writeHead(HTTP_NOT_MODIFIED, { etag, "cache-control": PRIVATE_NO_CACHE_HEADER });
           res.end();
           return;
         }
         let range = null;
         try { range = parseRange(req.headers.range, stat.size); }
         catch {
-          res.writeHead(MAGIC_416, { "content-range": `bytes */${stat.size}`, "accept-ranges": "bytes" });
+          res.writeHead(HTTP_RANGE_NOT_SATISFIABLE, { "content-range": `bytes */${stat.size}`, "accept-ranges": "bytes" });
           res.end();
           return;
         }
@@ -917,7 +920,7 @@ export function createPinnedWidgetRoutes({
           etag,
         };
         if (range) headers["content-range"] = `bytes ${start}-${end}/${stat.size}`;
-        res.writeHead(range ? MAGIC_206 : MAGIC_200, headers);
+        res.writeHead(range ? HTTP_PARTIAL_CONTENT : HTTP_OK, headers);
         if (stat.size === 0) { res.end(); return; }
         const stream = createReadStream(target, { start, end });
         const destroy = () => stream.destroy();

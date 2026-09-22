@@ -2,18 +2,18 @@ import { homedir } from "node:os";
 import { createCodexSessionStateReader } from "../../runner-drivers/codex-session-model.mjs";
 import { unlinkSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-const MAGIC_1000 = 1000;
-const MAGIC_200 = 200;
-const MAGIC_24 = 24;
-const MAGIC_3 = 3;
-const MAGIC_30 = 30;
-const MAGIC_400 = 400;
-const MAGIC_404 = 404;
-const MAGIC_409 = 409;
-const MAGIC_500 = 500;
-const MAGIC_60 = 60;
-const MAGIC_7 = 7;
-const MAGIC_90 = 90;
+const MILLISECONDS_PER_SECOND = 1000;
+const HTTP_OK = 200;
+const HOURS_PER_DAY = 24;
+const MIN_SEARCH_QUERY_CHARS = 3;
+const ANALYTICS_MONTH_DAYS = 30;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_NOT_FOUND = 404;
+const HTTP_CONFLICT = 409;
+const HTTP_INTERNAL_SERVER_ERROR = 500;
+const SECONDS_PER_MINUTE = 60;
+const ANALYTICS_WEEK_DAYS = 7;
+const ANALYTICS_QUARTER_DAYS = 90;
 
 
 const NATIVE_SESSION_BACKENDS = new Set(["claude-code", "codex", "gemini", "amp", "antigravity"]);
@@ -233,7 +233,7 @@ export function createSessionRoutes({
     const rawBefore = url.searchParams.get("before");
     const limit = rawLimit === null ? null : Number(rawLimit);
     const before = rawBefore === null ? null : Number(rawBefore);
-    const invalid = (limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > MAGIC_200))
+    const invalid = (limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > HTTP_OK))
       || (before !== null && (!Number.isInteger(before) || before < 0));
     return invalid ? null : { limit, before };
   }
@@ -278,7 +278,7 @@ export function createSessionRoutes({
   }
 
   function validateSearchRequest({ query, scope, path, sessionIdentity }) {
-    if (query.length < MAGIC_3) return "query must be at least 3 characters";
+    if (query.length < MIN_SEARCH_QUERY_CHARS) return "query must be at least 3 characters";
     if (!["session", "folder", "all"].includes(scope)) return `invalid scope: ${scope}`;
     if (scope === "session") return validateSessionSearchScope({ path, sessionIdentity });
     if (scope === "folder" && !sqlite && path && !isWithin(path, catalog.root)) return "folder must be under the sessions root";
@@ -297,22 +297,22 @@ export function createSessionRoutes({
   return {
     "GET /analytics/usage": async (_req, res, url) => {
       if (!sqlite || typeof catalog.usageAnalytics !== "function") {
-        json(res, MAGIC_400, { error: "usage analytics requires the SQLite session backend" });
+        json(res, HTTP_BAD_REQUEST, { error: "usage analytics requires the SQLite session backend" });
         return;
       }
       const range = url.searchParams.get("range") || "7d";
       const bucket = url.searchParams.get("bucket") || "day";
-      const durations = { "24h": MAGIC_24 * MAGIC_60 * MAGIC_60 * MAGIC_1000, "7d": MAGIC_7 * MAGIC_24 * MAGIC_60 * MAGIC_60 * MAGIC_1000, "30d": MAGIC_30 * MAGIC_24 * MAGIC_60 * MAGIC_60 * MAGIC_1000, "90d": MAGIC_90 * MAGIC_24 * MAGIC_60 * MAGIC_60 * MAGIC_1000, all: null };
+      const durations = { "24h": HOURS_PER_DAY * SECONDS_PER_MINUTE * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND, "7d": ANALYTICS_WEEK_DAYS * HOURS_PER_DAY * SECONDS_PER_MINUTE * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND, "30d": ANALYTICS_MONTH_DAYS * HOURS_PER_DAY * SECONDS_PER_MINUTE * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND, "90d": ANALYTICS_QUARTER_DAYS * HOURS_PER_DAY * SECONDS_PER_MINUTE * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND, all: null };
       if (!(range in durations) || !["hour", "day"].includes(bucket)) {
-        json(res, MAGIC_400, { error: "invalid analytics range or bucket" });
+        json(res, HTTP_BAD_REQUEST, { error: "invalid analytics range or bucket" });
         return;
       }
       const generatedAtMs = now();
       const since = durations[range] == null ? null : new Date(generatedAtMs - durations[range]).toISOString();
       try {
-        json(res, MAGIC_200, { range, since, generatedAt: new Date(generatedAtMs).toISOString(), ...await catalog.usageAnalytics({ bucket, since }) });
+        json(res, HTTP_OK, { range, since, generatedAt: new Date(generatedAtMs).toISOString(), ...await catalog.usageAnalytics({ bucket, since }) });
       } catch (error) {
-        json(res, MAGIC_500, { error: `cannot aggregate usage: ${errorMessage(error)}` });
+        json(res, HTTP_INTERNAL_SERVER_ERROR, { error: `cannot aggregate usage: ${errorMessage(error)}` });
       }
     },
 
@@ -328,7 +328,7 @@ export function createSessionRoutes({
         else {
           location = requested;
           if (!isWithin(location, catalog.root)) {
-            json(res, MAGIC_400, { error: "folder must be under the sessions root" });
+            json(res, HTTP_BAD_REQUEST, { error: "folder must be under the sessions root" });
             return;
           }
         }
@@ -356,31 +356,31 @@ export function createSessionRoutes({
             : candidate.sessionFile === session.path);
           return { ...session, runnerId: runner?.id ?? null, alive: !!runner?.proc, busy: !!runner?.busy };
         }));
-        json(res, MAGIC_200, { sessions: result });
+        json(res, HTTP_OK, { sessions: result });
       } catch (error) {
-        json(res, MAGIC_500, { error: `failed to list sessions: ${errorMessage(error)}` });
+        json(res, HTTP_INTERNAL_SERVER_ERROR, { error: `failed to list sessions: ${errorMessage(error)}` });
       }
     },
 
     "POST /session/archive": async (req, res) => {
       if (!readJsonBody) {
-        json(res, MAGIC_500, { error: "request body reader unavailable" });
+        json(res, HTTP_INTERNAL_SERVER_ERROR, { error: "request body reader unavailable" });
         return;
       }
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
       if (!isRecord(body)) {
-        json(res, MAGIC_400, { error: "request body must be a JSON object" });
+        json(res, HTTP_BAD_REQUEST, { error: "request body must be a JSON object" });
         return;
       }
       let reference;
       try { reference = state.sessionReferences.parse(String(body.sessionKey ?? "")); }
       catch {
-        json(res, MAGIC_400, { error: "invalid session reference" });
+        json(res, HTTP_BAD_REQUEST, { error: "invalid session reference" });
         return;
       }
       if (reference.backend !== catalog.backend && !NATIVE_SESSION_BACKENDS.has(reference.backend)) {
-        json(res, MAGIC_400, { error: "session backend does not match the configured store" });
+        json(res, HTTP_BAD_REQUEST, { error: "session backend does not match the configured store" });
         return;
       }
       const repository = state.appStore?.repositories?.sessions;
@@ -390,7 +390,7 @@ export function createSessionRoutes({
         storagePath: reference.storagePath ?? null,
       });
       if (!owner) {
-        json(res, MAGIC_404, { error: "session is not registered" });
+        json(res, HTTP_NOT_FOUND, { error: "session is not registered" });
         return;
       }
       const archived = body.archived !== false;
@@ -404,9 +404,9 @@ export function createSessionRoutes({
             if (belongsToFamily && runner.proc) await stopRunner(runner);
           }
         }
-        json(res, MAGIC_200, { sessionKey: body.sessionKey, archived });
+        json(res, HTTP_OK, { sessionKey: body.sessionKey, archived });
       } catch (error) {
-        json(res, MAGIC_500, { error: `failed to update session archive state: ${errorMessage(error)}` });
+        json(res, HTTP_INTERNAL_SERVER_ERROR, { error: `failed to update session archive state: ${errorMessage(error)}` });
       }
     },
 
@@ -428,7 +428,7 @@ export function createSessionRoutes({
         }
       }
       if (!reference) {
-        json(res, MAGIC_400, { error: `not a session reference: ${url.searchParams.get("path") ?? key}` });
+        json(res, HTTP_BAD_REQUEST, { error: `not a session reference: ${url.searchParams.get("path") ?? key}` });
         return;
       }
       const operations = sessionOperations ?? {
@@ -439,7 +439,7 @@ export function createSessionRoutes({
         },
       };
       if (!operations?.capabilities?.delete?.[reference.backend]) {
-        json(res, MAGIC_409, { error: `${reference.backend} session deletion is not supported by the configured pi` });
+        json(res, HTTP_CONFLICT, { error: `${reference.backend} session deletion is not supported by the configured pi` });
         return;
       }
       const matchingRunners = [...state.runners.values()].filter((runner) => runner.sessionRef
@@ -484,57 +484,57 @@ export function createSessionRoutes({
           },
           broadcast: () => runnersChanged(),
         });
-        json(res, MAGIC_200, {
+        json(res, HTTP_OK, {
           deleted: outcome.agentResult.deleted,
           closedHublots: outcome.closedHublots,
           releasedRoutines: outcome.deletedRoutines,
         });
       } catch (error) {
-        const status = error?.code === "capability_unavailable" ? MAGIC_409 : MAGIC_500;
+        const status = error?.code === "capability_unavailable" ? HTTP_CONFLICT : HTTP_INTERNAL_SERVER_ERROR;
         json(res, status, { error: `failed to delete session: ${errorMessage(error)}` });
       }
     },
 
     "GET /session-by-id": async (_req, res, url) => {
       const id = String(url.searchParams.get("id") ?? "").trim();
-      if (!id) { json(res, MAGIC_400, { error: "id required" }); return; }
+      if (!id) { json(res, HTTP_BAD_REQUEST, { error: "id required" }); return; }
       try {
         const session = await catalog.findById(id);
-        if (!session) { json(res, MAGIC_404, { error: `no session with id ${id}` }); return; }
-        json(res, MAGIC_200, { session: await decorate(session) });
+        if (!session) { json(res, HTTP_NOT_FOUND, { error: `no session with id ${id}` }); return; }
+        json(res, HTTP_OK, { session: await decorate(session) });
       } catch (error) {
-        json(res, MAGIC_500, { error: `failed to read session: ${errorMessage(error)}` });
+        json(res, HTTP_INTERNAL_SERVER_ERROR, { error: `failed to read session: ${errorMessage(error)}` });
       }
     },
 
     "GET /session-entries": async (_req, res, url) => {
       const identity = requestedIdentity(url);
-      if (!identity) { json(res, MAGIC_404, { error: "session not found" }); return; }
-      try { json(res, MAGIC_200, await catalog.entries(identity)); }
-      catch (error) { json(res, MAGIC_500, { error: `failed to parse session: ${errorMessage(error)}` }); }
+      if (!identity) { json(res, HTTP_NOT_FOUND, { error: "session not found" }); return; }
+      try { json(res, HTTP_OK, await catalog.entries(identity)); }
+      catch (error) { json(res, HTTP_INTERNAL_SERVER_ERROR, { error: `failed to parse session: ${errorMessage(error)}` }); }
     },
 
     "GET /session-messages": async (_req, res, url) => {
       const identity = requestedIdentity(url);
-      if (!identity) { json(res, MAGIC_404, { error: "session not found" }); return; }
+      if (!identity) { json(res, HTTP_NOT_FOUND, { error: "session not found" }); return; }
       const pageRequest = parseTranscriptPage(url);
-      if (!pageRequest) { json(res, MAGIC_400, { error: "invalid transcript page" }); return; }
+      if (!pageRequest) { json(res, HTTP_BAD_REQUEST, { error: "invalid transcript page" }); return; }
       try {
         const transcript = await catalog.messages(identity);
         const saved = transcript.sessionId ? await catalog.findById?.(transcript.sessionId) : null;
         attachNativeCodexState(transcript, saved);
-        if (pageRequest.limit === null) { json(res, MAGIC_200, transcript); return; }
+        if (pageRequest.limit === null) { json(res, HTTP_OK, transcript); return; }
         const page = transcriptPage(Array.isArray(transcript.messages) ? transcript.messages : [], pageRequest);
-        json(res, MAGIC_200, { ...transcript, messages: page.messages, page: page.page });
-      } catch (error) { json(res, MAGIC_500, { error: `failed to parse session: ${errorMessage(error)}` }); }
+        json(res, HTTP_OK, { ...transcript, messages: page.messages, page: page.page });
+      } catch (error) { json(res, HTTP_INTERNAL_SERVER_ERROR, { error: `failed to parse session: ${errorMessage(error)}` }); }
     },
 
     "GET /session-folders": async (_req, res, url) => {
       const forDir = url.searchParams.get("dir") ? resolvePath(String(url.searchParams.get("dir"))) : state.currentDir;
       try {
-        json(res, MAGIC_200, { folders: await catalog.folders(), current: catalog.locationForCwd(forDir) });
+        json(res, HTTP_OK, { folders: await catalog.folders(), current: catalog.locationForCwd(forDir) });
       } catch (error) {
-        json(res, MAGIC_500, { error: `failed to list session folders: ${errorMessage(error)}` });
+        json(res, HTTP_INTERNAL_SERVER_ERROR, { error: `failed to list session folders: ${errorMessage(error)}` });
       }
     },
 
@@ -546,7 +546,7 @@ export function createSessionRoutes({
       const sessionIdentity = sessionSearchIdentity(url);
       if (scope === "session" && !sqlite && sessionIdentity) path = sessionIdentity;
       const error = validateSearchRequest({ query, scope, path, sessionIdentity });
-      if (error) { json(res, MAGIC_400, { error }); return; }
+      if (error) { json(res, HTTP_BAD_REQUEST, { error }); return; }
       try {
         const result = decorateSearchResults(await catalog.search(sqlite ? {
           q: query,
@@ -561,9 +561,9 @@ export function createSessionRoutes({
           includeTools: url.searchParams.get("tools") === "1",
           defaultDir: catalog.locationForCwd(state.currentDir),
         }));
-        json(res, MAGIC_200, { q: query, scope, ...result });
+        json(res, HTTP_OK, { q: query, scope, ...result });
       } catch (searchError) {
-        json(res, MAGIC_500, { error: `search failed: ${errorMessage(searchError)}` });
+        json(res, HTTP_INTERNAL_SERVER_ERROR, { error: `search failed: ${errorMessage(searchError)}` });
       }
     },
   };

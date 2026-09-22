@@ -1,13 +1,13 @@
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
-const MAGIC_1024 = 1024;
-const MAGIC_16 = 16;
-const MAGIC_200 = 200;
-const MAGIC_400 = 400;
-const MAGIC_403 = 403;
+const BYTES_PER_KIBIBYTE = 1024;
+const MAX_PATH_KIBIBYTES = 16;
+const HTTP_OK = 200;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_FORBIDDEN = 403;
 
 
-const MAX_PATH_BYTES = MAGIC_16 * MAGIC_1024;
+const MAX_PATH_BYTES = MAX_PATH_KIBIBYTES * BYTES_PER_KIBIBYTE;
 
 import { isNonArrayObject as isJsonObject } from "../../valuePredicates.mjs";
 
@@ -36,27 +36,27 @@ export function createWorkdirRoutes({ state, requestContext, spawnRunner, runner
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
       if (!isJsonObject(body)) {
-        json(res, MAGIC_400, { error: "request body must be a JSON object" });
+        json(res, HTTP_BAD_REQUEST, { error: "request body must be a JSON object" });
         return;
       }
       if (typeof body.path !== "string" || !body.path.trim()) {
-        json(res, MAGIC_400, { error: "path must be a non-empty string" });
+        json(res, HTTP_BAD_REQUEST, { error: "path must be a non-empty string" });
         return;
       }
       if (body.path.includes("\0") || Buffer.byteLength(body.path) > MAX_PATH_BYTES) {
-        json(res, MAGIC_400, { error: "path must not contain null bytes or exceed 16 KiB" });
+        json(res, HTTP_BAD_REQUEST, { error: "path must not contain null bytes or exceed 16 KiB" });
         return;
       }
 
       const target = resolveSafePath(resolve(body.path));
       if (!target) {
-        json(res, MAGIC_403, { error: `path outside the allowed roots: ${body.path}` });
+        json(res, HTTP_FORBIDDEN, { error: `path outside the allowed roots: ${body.path}` });
         return;
       }
       let directory = false;
       try { directory = statSync(target).isDirectory(); } catch { /* Report inaccessible paths uniformly. */ }
       if (!directory) {
-        json(res, MAGIC_400, { error: `not a directory: ${target}` });
+        json(res, HTTP_BAD_REQUEST, { error: `not a directory: ${target}` });
         return;
       }
 
@@ -64,7 +64,7 @@ export function createWorkdirRoutes({ state, requestContext, spawnRunner, runner
       state.currentDir = target;
       log(`[oyster] workdir changed to ${JSON.stringify(target)}, spawning a runner there`);
       const runner = await spawnRunner({ dir: target });
-      json(res, MAGIC_200, { workdir: target, runner: runnerInfo(runner) });
+      json(res, HTTP_OK, { workdir: target, runner: runnerInfo(runner) });
     },
   };
 }

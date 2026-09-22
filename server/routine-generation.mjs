@@ -1,8 +1,8 @@
 import { signalProcessGroup, STOP_GRACE_MS } from "./process-groups.mjs";
-const MAGIC_1000 = 1000;
-const MAGIC_5 = 5;
-const MAGIC_60 = 60;
-const MAGIC_NEG_3000 = -3000;
+const MILLISECONDS_PER_SECOND = 1000;
+const ROUTINE_AGENT_TIMEOUT_MINUTES = 5;
+const SECONDS_PER_MINUTE = 60;
+const STDERR_TAIL_MAX_CHARS_NEGATIVE_SLICE = -3000;
 
 
 /** Run a one-shot agent that authors and registers a routine through the
@@ -35,7 +35,7 @@ export function spawnRoutineAgent(state, { brief, sessionId }) {
       detached: true,
     });
     let tail = "";
-    const capture = (chunk) => { tail = (tail + String(chunk)).slice(MAGIC_NEG_3000); };
+    const capture = (chunk) => { tail = (tail + String(chunk)).slice(STDERR_TAIL_MAX_CHARS_NEGATIVE_SLICE); };
     proc.stdout.on("data", capture);
     proc.stderr.on("data", capture);
     let forceTimer = null;
@@ -44,7 +44,7 @@ export function spawnRoutineAgent(state, { brief, sessionId }) {
       forceTimer = setTimeout(() => signalProcessGroup(proc, "SIGKILL"), STOP_GRACE_MS);
       forceTimer.unref();
       reject(new Error("timed out while the routine agent was working"));
-    }, MAGIC_5 * MAGIC_60 * MAGIC_1000);
+    }, ROUTINE_AGENT_TIMEOUT_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND);
     const clearTimers = () => {
       clearTimeout(timeout);
       if (forceTimer) clearTimeout(forceTimer);
