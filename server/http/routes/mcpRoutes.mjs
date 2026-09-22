@@ -159,7 +159,8 @@ async function createWidgetGroup({ params, scope, api, text: renderText, session
 async function moveWidget({ params, api, text: renderText, sessionId }) {
   if (!params.id) throw new Error("'move' requires id");
   const { widget } = await api("PATCH", PINNED_WIDGETS_ROUTE, { id: params.id, groupId: params.group_id ?? null, beforeId: params.before_id ?? null, sessionId });
-  return renderText(`Moved ${widget.label}${widget.groupId ? ` into group ${widget.groupId}` : " to the top level"}.`, widget);
+  const destination = widget.groupId ? ` into group ${widget.groupId}` : " to the top level";
+  return renderText(`Moved ${widget.label}${destination}.`, widget);
 }
 
 async function listPinnedWidgets({ scope, api, text: renderText, sessionId }) {
@@ -169,8 +170,10 @@ async function listPinnedWidgets({ scope, api, text: renderText, sessionId }) {
   const all = data.widgets ?? [];
   const widgets = all.slice(0, MAX_GROUPED_WIDGET_PATHS);
   const groups = data.groups ?? [];
-  const lines = widgets.map((widget) =>
-    `- id=${widget.id} kind=${widget.kind} label=${JSON.stringify(widget.label)}${widget.groupId ? ` group=${widget.groupId}` : ""} status=${widget.availability}`);
+  const lines = widgets.map((widget) => {
+    const group = widget.groupId ? ` group=${widget.groupId}` : "";
+    return `- id=${widget.id} kind=${widget.kind} label=${JSON.stringify(widget.label)}${group} status=${widget.availability}`;
+  });
   if (all.length > widgets.length) lines.push(`… ${all.length - widgets.length} more widgets omitted`);
   return renderText(lines.length ? `Pinned Widgets (${groups.length} groups):\n${lines.join("\n")}` : "No pinned widgets.", { widgets, groups, total: all.length });
 }
@@ -279,8 +282,12 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
     }
     const { tunnels } = await api("GET", "/tunnels");
     const mine = tunnels.filter((t) => !t.sessionId || t.sessionId === sessionId);
-    const lines = mine.map((t) =>
-      `- id=${t.id} port=${t.port} ${t.url ?? `(waiting: ${t.status})`}${t.label ? ` — ${t.label}` : ""}${t.sessionId === sessionId ? "" : " (unbound)"}`);
+    const lines = mine.map((t) => {
+      const destination = t.url ?? `(waiting: ${t.status})`;
+      const label = t.label ? ` — ${t.label}` : "";
+      const binding = t.sessionId === sessionId ? "" : " (unbound)";
+      return `- id=${t.id} port=${t.port} ${destination}${label}${binding}`;
+    });
     return text(lines.length ? `Hublots for this session:\n${lines.join("\n")}` : "No hublots open for this session.", { tunnels: mine });
   });
 

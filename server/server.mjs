@@ -182,7 +182,8 @@ function validateToken(config) {
 }
 
 function validateEnum(value, allowed, label) {
-  if (!allowed.has(value)) throw new Error(`Invalid ${label} value "${value}"; expected ${[...allowed].map((item) => `"${item}"`).join(" or ")}`);
+  const expected = [...allowed].map((item) => `"${item}"`).join(" or ");
+  if (!allowed.has(value)) throw new Error(`Invalid ${label} value "${value}"; expected ${expected}`);
 }
 
 function validateConfig(config) {

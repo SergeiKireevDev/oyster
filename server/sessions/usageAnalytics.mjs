@@ -49,7 +49,8 @@ function usageRecord(record, bucket) {
 }
 
 function addUsageRecord({ models, series, total }, { message, timestamp }) {
-  const model = `${message.provider ? `${message.provider}/` : ""}${message.model}`;
+  const providerPrefix = message.provider ? `${message.provider}/` : "";
+  const model = `${providerPrefix}${message.model}`;
   if (!models.has(model)) models.set(model, { model, ...emptyUsage() });
   const seriesKey = `${timestamp}\u0000${model}`;
   if (!series.has(seriesKey)) series.set(seriesKey, { bucket: timestamp, model, ...emptyUsage() });

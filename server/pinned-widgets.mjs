@@ -562,7 +562,8 @@ export async function runMonitoringScript(row, mode, { resolveSafePath, execFile
     return String(result?.stdout ?? "").replace(/\s+$/, "");
   } catch (error) {
     const detail = String(error?.stderr || error?.message || error).trim().slice(0, MAX_ERROR_DETAIL_CHARS);
-    throw Object.assign(new Error(`monitoring script failed${detail ? `: ${detail}` : ""}`), { statusCode: 422 });
+    const detailSuffix = detail ? `: ${detail}` : "";
+    throw Object.assign(new Error(`monitoring script failed${detailSuffix}`), { statusCode: 422 });
   }
 }
 
