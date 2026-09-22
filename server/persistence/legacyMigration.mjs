@@ -53,6 +53,44 @@ function migrationFailure(cause, id, recordingErrors) {
   }
 }
 
+function validateMigrationInputs({ appStore, mode, id, now, tasks }) {
+  const ledger = appStore?.repositories?.migrationLedger;
+  if (typeof ledger?.start !== "function" || typeof ledger?.finish !== "function") {
+    throw new Error("migration ledger repository with start and finish methods is required");
+  }
+  if (!MIGRATION_MODES.has(mode)) throw new Error(`invalid migration mode: ${mode}`);
+  if (typeof id !== "string" || !id) throw new TypeError("migration id must be a non-empty string");
+  if (typeof now !== "function") throw new TypeError("migration clock must be a function");
+  if (tasks === null || typeof tasks !== "object" || Array.isArray(tasks)) throw new TypeError("migration tasks must be an object");
+  const entries = Object.entries(tasks);
+  if (!entries.length) throw new Error("at least one migration task is required");
+  for (const [domain, task] of entries) {
+    if (!domain.trim() || typeof task !== "function") throw new TypeError("migration tasks must have non-empty domain names and function values");
+  }
+  return { ledger, entries };
+}
+
+function completedMigrationResult({ id, mode, sourceCounts, destinationCounts, conflicts, startedAt, finishedAt }) {
+  return Object.freeze({
+    id, mode, status: "completed",
+    sourceCounts: Object.freeze({ ...sourceCounts }),
+    destinationCounts: Object.freeze({ ...destinationCounts }),
+    conflicts: Object.freeze([...conflicts]),
+    startedAt, finishedAt,
+  });
+}
+
+function recordMigrationFailure({ ledger, id, now, startedAt, sourceCounts, destinationCounts, conflicts, cause }) {
+  const recordingErrors = [];
+  let finishedAt = startedAt;
+  try { finishedAt = timestamp(now, "migration failure timestamp"); }
+  catch (error) { recordingErrors.push(error); }
+  const message = cause instanceof Error ? cause.message : String(cause);
+  try { ledger.finish({ id, status: "failed", sourceCounts, destinationCounts, conflicts, error: message, finishedAt }); }
+  catch (error) { recordingErrors.push(error); }
+  throw migrationFailure(cause, id, recordingErrors);
+}
+
 /**
  * Execute one auditable legacy-data migration pass. Domain tasks inspect the
  * same sources in both modes and must mutate only when `apply` is true.
@@ -64,23 +102,7 @@ export async function runLegacyMigration({
   id = randomUUID(),
   now = () => new Date().toISOString(),
 } = {}) {
-  const ledger = appStore?.repositories?.migrationLedger;
-  if (typeof ledger?.start !== "function" || typeof ledger?.finish !== "function") {
-    throw new Error("migration ledger repository with start and finish methods is required");
-  }
-  if (!MIGRATION_MODES.has(mode)) throw new Error(`invalid migration mode: ${mode}`);
-  if (typeof id !== "string" || !id) throw new TypeError("migration id must be a non-empty string");
-  if (typeof now !== "function") throw new TypeError("migration clock must be a function");
-  if (tasks === null || typeof tasks !== "object" || Array.isArray(tasks)) {
-    throw new TypeError("migration tasks must be an object");
-  }
-  const entries = Object.entries(tasks);
-  if (!entries.length) throw new Error("at least one migration task is required");
-  for (const [domain, task] of entries) {
-    if (!domain.trim() || typeof task !== "function") {
-      throw new TypeError("migration tasks must have non-empty domain names and function values");
-    }
-  }
+  const { ledger, entries } = validateMigrationInputs({ appStore, mode, id, now, tasks });
 
   const startedAt = timestamp(now, "migration start timestamp");
   ledger.start({ id, mode, startedAt });
@@ -97,30 +119,8 @@ export async function runLegacyMigration({
     }
     const finishedAt = timestamp(now, "migration finish timestamp");
     ledger.finish({ id, status: "completed", sourceCounts, destinationCounts, conflicts, finishedAt });
-    return Object.freeze({
-      id, mode, status: "completed",
-      sourceCounts: Object.freeze({ ...sourceCounts }),
-      destinationCounts: Object.freeze({ ...destinationCounts }),
-      conflicts: Object.freeze([...conflicts]),
-      startedAt, finishedAt,
-    });
+    return completedMigrationResult({ id, mode, sourceCounts, destinationCounts, conflicts, startedAt, finishedAt });
   } catch (cause) {
-    const recordingErrors = [];
-    let finishedAt = startedAt;
-    try {
-      finishedAt = timestamp(now, "migration failure timestamp");
-    } catch (error) {
-      recordingErrors.push(error);
-    }
-    const message = cause instanceof Error ? cause.message : String(cause);
-    try {
-      ledger.finish({
-        id, status: "failed", sourceCounts, destinationCounts, conflicts,
-        error: message, finishedAt,
-      });
-    } catch (error) {
-      recordingErrors.push(error);
-    }
-    throw migrationFailure(cause, id, recordingErrors);
+    recordMigrationFailure({ ledger, id, now, startedAt, sourceCounts, destinationCounts, conflicts, cause });
   }
 }

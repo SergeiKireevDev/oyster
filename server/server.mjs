@@ -50,41 +50,48 @@ function envFlag(name) {
   throw new Error(`${name} must be one of: 1, true, yes, on, 0, false, no, off`);
 }
 
+function storedToken(tokenFile) {
+  try {
+    const token = readFileSync(tokenFile, "utf8").trim();
+    if (!token) throw new Error(`Oyster token file is empty: ${tokenFile}`);
+    return token;
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function closeDescriptor(descriptor) {
+  if (descriptor !== null) try { closeSync(descriptor); } catch {}
+}
+
+function createTokenFile(tokenFile, token) {
+  let descriptor = null;
+  let created = false;
+  try {
+    descriptor = openSync(tokenFile, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
+    created = true;
+    writeFileSync(descriptor, `${token}\n`, "utf8");
+    fsyncSync(descriptor);
+    closeSync(descriptor);
+    return token;
+  } catch (error) {
+    closeDescriptor(descriptor);
+    if (created) try { unlinkSync(tokenFile); } catch {}
+    throw error;
+  }
+}
+
 function defaultToken() {
   const tokenFile = join(PROJECT_ROOT, ".ui-token");
-  const readStoredToken = () => {
-    try {
-      const token = readFileSync(tokenFile, "utf8").trim();
-      if (!token) throw new Error(`Oyster token file is empty: ${tokenFile}`);
-      return token;
-    } catch (error) {
-      if (error.code === "ENOENT") return null;
-      throw error;
-    }
-  };
-
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const stored = readStoredToken();
+    const stored = storedToken(tokenFile);
     if (stored) return stored;
-
-    const generated = randomBytes(16).toString("hex");
-    let descriptor = null;
-    let created = false;
     try {
-      descriptor = openSync(tokenFile, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
-      created = true;
-      writeFileSync(descriptor, `${generated}\n`, "utf8");
-      fsyncSync(descriptor);
-      closeSync(descriptor);
-      descriptor = null;
-      return generated;
+      return createTokenFile(tokenFile, randomBytes(16).toString("hex"));
     } catch (error) {
-      if (descriptor !== null) try { closeSync(descriptor); } catch {}
-      if (created) try { unlinkSync(tokenFile); } catch {}
-      // Another server may have created and then removed the file. Retry the
-      // complete atomic read/create sequence rather than returning null.
       if (error.code === "EEXIST") {
-        const racedToken = readStoredToken();
+        const racedToken = storedToken(tokenFile);
         if (racedToken) return racedToken;
         if (attempt < 3) continue;
       }
@@ -157,6 +164,16 @@ function validateHarnessExecutables(config) {
   ]) validateExecutable(label, executable);
 }
 
+function validateToken(config) {
+  if (typeof config.TOKEN !== "string" || config.TOKEN.trim() === "" || /[\u0000-\u001f\u007f]/.test(config.TOKEN)) {
+    throw new Error("OYSTER_TOKEN/--token must be a non-empty string without control characters");
+  }
+}
+
+function validateEnum(value, allowed, label) {
+  if (!allowed.has(value)) throw new Error(`Invalid ${label} value "${value}"; expected ${[...allowed].map((item) => `"${item}"`).join(" or ")}`);
+}
+
 function validateConfig(config) {
   if (!nodeVersionSupported(process.versions.node.split(".").map(Number))) {
     throw new Error(`oyster requires Node.js >= ${MIN_NODE_VERSION.join(".")} for its application database; current runtime is ${process.versions.node}`);
@@ -164,16 +181,14 @@ function validateConfig(config) {
   if (!Number.isInteger(config.PORT) || config.PORT < 0 || config.PORT > 65535) throw new Error("PORT/--port must be an integer from 0 to 65535");
   if (typeof config.HOST !== "string" || config.HOST.trim() === "") throw new Error("HOST/--host must not be empty");
   validateConfiguredWorkdir(config);
-  if (typeof config.TOKEN !== "string" || config.TOKEN.trim() === "" || /[\u0000-\u001f\u007f]/.test(config.TOKEN)) {
-    throw new Error("OYSTER_TOKEN/--token must be a non-empty string without control characters");
-  }
+  validateToken(config);
   const configuredSessionDir = config.PI_EXTRA_ARGS.indexOf("--session-dir");
   if (configuredSessionDir >= 0 && !config.PI_EXTRA_ARGS[configuredSessionDir + 1]) throw new Error("--session-dir in PI_ARGS/--pi-args requires a directory");
   if (!config.OYSTER_DB_PATH.endsWith(".sqlite")) throw new Error(`OYSTER_DB_PATH must name a .sqlite file: ${config.OYSTER_DB_PATH}`);
   if (config.SQLITE_PATH && config.OYSTER_DB_PATH === config.SQLITE_PATH) throw new Error("OYSTER_DB_PATH must be separate from the coding-agent sessions database");
-  if (!new Set(["jsonl", "sqlite"]).has(config.PERSISTENT_STORE)) throw new Error(`Invalid PERSISTENT_STORE value "${config.PERSISTENT_STORE}"; expected "jsonl" or "sqlite"`);
-  if (!new Set(["read-only", "workspace-write", "danger-full-access"]).has(config.CODEX_SANDBOX)) throw new Error(`Invalid CODEX_SANDBOX value "${config.CODEX_SANDBOX}"`);
-  if (!new Set(["default", "auto_edit", "yolo", "plan"]).has(config.GEMINI_APPROVAL_MODE)) throw new Error(`Invalid GEMINI_APPROVAL_MODE value "${config.GEMINI_APPROVAL_MODE}"`);
+  validateEnum(config.PERSISTENT_STORE, new Set(["jsonl", "sqlite"]), "PERSISTENT_STORE");
+  validateEnum(config.CODEX_SANDBOX, new Set(["read-only", "workspace-write", "danger-full-access"]), "CODEX_SANDBOX");
+  validateEnum(config.GEMINI_APPROVAL_MODE, new Set(["default", "auto_edit", "yolo", "plan"]), "GEMINI_APPROVAL_MODE");
   validatePiExecutable(config);
   validateHarnessExecutables(config);
   validateLocalPiBuild(config.PI_BIN, DEFAULT_LOCAL_PI);
@@ -363,59 +378,54 @@ async function retireApplication(application, retiredReloadCount) {
 
 let nextApplicationGeneration = 0;
 
+function assertApplicationModule(mod, transactional) {
+  if (!transactional && typeof mod.init !== "function") throw new Error("application module must export buildCandidate() or init()");
+}
+
+function assertCandidate(candidate, transactional) {
+  if (!candidate || typeof candidate.handleRequest !== "function") throw new Error("candidate application is missing handleRequest()");
+  if (transactional && typeof candidate.dispose !== "function") throw new Error("candidate application is missing dispose()");
+  if (typeof candidate.startPi !== "function" || typeof candidate.stopPi !== "function") {
+    throw new Error("candidate application is missing startPi() or stopPi()");
+  }
+}
+
+async function disposeFailedCandidate(candidate, error) {
+  if (typeof candidate?.dispose !== "function") throw error;
+  try { await candidate.dispose(); }
+  catch (cleanupError) { throw new AggregateError([error, cleanupError], "candidate activation and cleanup failed"); }
+  throw error;
+}
+
+async function buildAndActivateCandidate(mod, transactional, generation) {
+  let candidate = null;
+  try {
+    candidate = transactional ? await mod.buildCandidate(state, { generation }) : await mod.init(state);
+    if (!candidate || typeof candidate.handleRequest !== "function") throw new Error("candidate application is missing handleRequest()");
+    if (transactional && typeof candidate.dispose !== "function") throw new Error("candidate application is missing dispose()");
+    if (shuttingDown) throw new Error("application load cancelled during shutdown");
+    if (typeof candidate.activate === "function") await candidate.activate();
+    if (shuttingDown) throw new Error("application load cancelled during shutdown");
+    assertCandidate(candidate, transactional);
+    return candidate;
+  } catch (error) {
+    await disposeFailedCandidate(candidate, error);
+  }
+}
+
 async function loadApp() {
   // Allocate before import so failed attempts cannot reuse a generation token.
   const generation = ++nextApplicationGeneration;
   const url = `${pathToFileURL(APP_PATH)}?generation=${generation}&mtime=${statSync(APP_PATH).mtimeMs}`;
   const mod = await import(url);
   const transactional = typeof mod.buildCandidate === "function";
-  if (!transactional && typeof mod.init !== "function") {
-    throw new Error("application module must export buildCandidate() or init()");
-  }
-  let candidate = null;
-  try {
-    // init() remains supported for small embedders and older application
-    // modules. Transactional applications expose buildCandidate().
-    candidate = transactional
-      ? await mod.buildCandidate(state, { generation })
-      : await mod.init(state);
-    if (!candidate || typeof candidate.handleRequest !== "function") {
-      throw new Error("candidate application is missing handleRequest()");
-    }
-    if (transactional && typeof candidate.dispose !== "function") {
-      throw new Error("candidate application is missing dispose()");
-    }
-    if (shuttingDown) throw new Error("application load cancelled during shutdown");
-    if (typeof candidate.activate === "function") await candidate.activate();
-    if (shuttingDown) throw new Error("application load cancelled during shutdown");
-    // Transactional candidates may expose lifecycle methods through getters
-    // that become available only after activation has assembled the app.
-    if (typeof candidate.startPi !== "function" || typeof candidate.stopPi !== "function") {
-      throw new Error("candidate application is missing startPi() or stopPi()");
-    }
-  } catch (error) {
-    // Nothing active is touched before the single assignment below. A failed
-    // activated candidate owns and cleans only its staged resources.
-    if (typeof candidate?.dispose === "function") {
-      try {
-        await candidate.dispose();
-      } catch (cleanupError) {
-        throw new AggregateError([error, cleanupError], "candidate activation and cleanup failed");
-      }
-    }
-    throw error;
-  }
-
+  assertApplicationModule(mod, transactional);
+  const candidate = await buildAndActivateCandidate(mod, transactional, generation);
   const previous = app;
   app = candidate; // commit point: synchronous, non-throwing handler swap
   state.reloadCount++;
   console.log(`[oyster] app.mjs loaded (reload #${state.reloadCount})`);
-  if (state.reloadCount > 1) {
-    state.serverEvent({ type: "code_reloaded", reloadCount: state.reloadCount });
-  }
-
-  // Retirement is deliberately post-commit. New requests can only enter the
-  // candidate, while its dispose() drains requests already admitted by old.
+  if (state.reloadCount > 1) state.serverEvent({ type: "code_reloaded", reloadCount: state.reloadCount });
   if (previous?.dispose) await retireApplication(previous, state.reloadCount);
 }
 

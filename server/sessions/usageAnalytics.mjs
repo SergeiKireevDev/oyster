@@ -37,6 +37,25 @@ function dedupeKeys(record, message) {
   return keys;
 }
 
+function usageRecord(record, bucket) {
+  if (!isObject(record) || !isObject(record.message)) return null;
+  const message = record.message;
+  if (!isObject(message.usage) || typeof message.model !== "string" || !message.model) return null;
+  if (message.provider != null && typeof message.provider !== "string") return null;
+  const timestamp = bucketTimestamp(record.timestamp ?? message.timestamp, bucket);
+  return timestamp ? { record, message, timestamp } : null;
+}
+
+function addUsageRecord({ models, series, total }, { message, timestamp }) {
+  const model = `${message.provider ? `${message.provider}/` : ""}${message.model}`;
+  if (!models.has(model)) models.set(model, { model, ...emptyUsage() });
+  const seriesKey = `${timestamp}\u0000${model}`;
+  if (!series.has(seriesKey)) series.set(seriesKey, { bucket: timestamp, model, ...emptyUsage() });
+  addUsage(total, message.usage);
+  addUsage(models.get(model), message.usage);
+  addUsage(series.get(seriesKey), message.usage);
+}
+
 /** Aggregate assistant-message usage records, deduplicating copied fork entries by stable response or entry ID. */
 export function aggregateUsageRecords(records, { bucket = "day" } = {}) {
   if (!SUPPORTED_BUCKETS.has(bucket)) throw new Error(`unsupported analytics bucket: ${bucket}`);
@@ -46,24 +65,14 @@ export function aggregateUsageRecords(records, { bucket = "day" } = {}) {
   const total = emptyUsage();
 
   for (const record of records ?? []) {
-    if (!isObject(record) || !isObject(record.message)) continue;
-    const message = record.message;
-    if (!isObject(message.usage) || typeof message.model !== "string" || !message.model) continue;
-    if (message.provider != null && typeof message.provider !== "string") continue;
-
-    const timestamp = bucketTimestamp(record.timestamp ?? message.timestamp, bucket);
-    if (!timestamp) continue;
+    const usage = usageRecord(record, bucket);
+    if (!usage) continue;
+    const { message } = usage;
     const dedupe = dedupeKeys(record, message);
     if (dedupe.some((key) => seen.has(key))) continue;
     for (const key of dedupe) seen.add(key);
 
-    const model = `${message.provider ? `${message.provider}/` : ""}${message.model}`;
-    if (!models.has(model)) models.set(model, { model, ...emptyUsage() });
-    const seriesKey = `${timestamp}\u0000${model}`;
-    if (!series.has(seriesKey)) series.set(seriesKey, { bucket: timestamp, model, ...emptyUsage() });
-    addUsage(total, message.usage);
-    addUsage(models.get(model), message.usage);
-    addUsage(series.get(seriesKey), message.usage);
+    addUsageRecord({ models, series, total }, usage);
   }
 
   const clean = (row) => ({ ...row, cost: Number(row.cost.toFixed(6)) });

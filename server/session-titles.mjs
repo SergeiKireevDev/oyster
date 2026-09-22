@@ -23,15 +23,14 @@ function json(value, limit = MESSAGE_TEXT_LIMIT) {
     chunks.push(chunk);
     remaining -= chunk.length;
   };
-  const render = (item, depth) => {
-    if (remaining <= 0) return;
-    if (item === null) { append("null"); return; }
-    if (typeof item === "string") { append(JSON.stringify(item.slice(0, limit))); return; }
-    if (typeof item === "number" || typeof item === "boolean") { append(stringValue(item)); return; }
-    if (typeof item !== "object") { append(stringValue(item)); return; }
+  const scalarJson = (item) => {
+    if (item === null) return "null";
+    if (typeof item === "string") return JSON.stringify(item.slice(0, limit));
+    return typeof item === "number" || typeof item === "boolean" || typeof item !== "object" ? stringValue(item) : null;
+  };
+  const renderObject = (item, depth) => {
     if (ancestors.has(item)) { append('"[circular]"'); return; }
     if (depth >= 8 || entries >= 100) { append('"[truncated]"'); return; }
-
     ancestors.add(item);
     let keys;
     try { keys = Object.keys(item).slice(0, 50); } catch { keys = []; }
@@ -47,41 +46,50 @@ function json(value, limit = MESSAGE_TEXT_LIMIT) {
     append(array ? "]" : "}");
     ancestors.delete(item);
   };
+  const render = (item, depth) => {
+    if (remaining <= 0) return;
+    const scalar = scalarJson(item);
+    if (scalar !== null) { append(scalar); return; }
+    renderObject(item, depth);
+  };
   render(value, 0);
   return chunks.join("");
+}
+
+function blockText(block, ancestors) {
+  if (!block || typeof block !== "object") return stringValue(block);
+  const type = property(block, "type");
+  if (type === "text") {
+    const value = property(block, "text");
+    return typeof value === "string" ? value : json(value);
+  }
+  if (type === "image") return "[image]";
+  if (type === "thinking") return "[thinking omitted]";
+  if (type === "toolCall") {
+    const name = stringValue(property(block, "name")) || "unknown";
+    return `[tool call: ${name} ${json(property(block, "arguments") ?? {})}]`;
+  }
+  return type === "toolResult" ? `[tool result: ${contentText(property(block, "content"), ancestors)}]` : json(block);
+}
+
+function appendRenderedBlock(rendered, length, text) {
+  if (!text) return length;
+  const separator = rendered.length ? "\n" : "";
+  const chunk = `${separator}${text}`.slice(0, MESSAGE_TEXT_LIMIT - length);
+  rendered.push(chunk);
+  return length + chunk.length;
 }
 
 function contentText(content, ancestors = new WeakSet()) {
   if (typeof content === "string") return content.slice(0, MESSAGE_TEXT_LIMIT);
   if (!Array.isArray(content)) return content == null ? "" : json(content);
   if (ancestors.has(content)) return "[circular content]";
-
   ancestors.add(content);
   const rendered = [];
   let length = 0;
   const blockCount = Math.min(Number(property(content, "length")) || 0, 100);
   for (let index = 0; index < blockCount && length < MESSAGE_TEXT_LIMIT; index += 1) {
-    const block = property(content, index);
-    const type = property(block, "type");
-    let text;
-    if (!block || typeof block !== "object") text = stringValue(block);
-    else if (type === "text") {
-      const value = property(block, "text");
-      text = typeof value === "string" ? value : json(value);
-    } else if (type === "image") text = "[image]";
-    else if (type === "thinking") text = "[thinking omitted]";
-    else if (type === "toolCall") {
-      const name = stringValue(property(block, "name")) || "unknown";
-      text = `[tool call: ${name} ${json(property(block, "arguments") ?? {})}]`;
-    } else if (type === "toolResult") {
-      text = `[tool result: ${contentText(property(block, "content"), ancestors)}]`;
-    } else text = json(block);
-    if (!text) continue;
-    const separator = rendered.length ? "\n" : "";
-    const available = MESSAGE_TEXT_LIMIT - length;
-    const chunk = `${separator}${text}`.slice(0, available);
-    rendered.push(chunk);
-    length += chunk.length;
+    length = appendRenderedBlock(rendered, length, blockText(property(content, index), ancestors));
   }
   ancestors.delete(content);
   return rendered.join("");

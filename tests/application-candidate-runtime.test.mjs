@@ -135,14 +135,14 @@ test("application construction defers candidate resource acquisition until activ
   const activation = appSource.indexOf("async function activate()");
   assert.ok(activation > appSource.indexOf("export async function buildCandidate"));
   for (const acquisition of [
-    "createSqliteSessionCatalog",
+    "initializeSessionCatalog(state",
     "createPiProcessLauncher({ config })",
     "createConfiguredRunnerDrivers({ config, piProcesses: state.piProcesses, openRouterRouting, mcpSettings })",
     "createOpenRouterRouting({ repository: appStore.repositories.settings, config })",
     "createRunnerManager(state",
     "scheduleHublotStartupReconciliation({ state",
   ]) {
-    assert.ok(appSource.indexOf(acquisition) > activation, `${acquisition} must be activation-only`);
+    assert.ok(appSource.lastIndexOf(acquisition) > activation, `${acquisition} must be activation-only`);
   }
   assert.doesNotMatch(appSource, /state\.sessionCatalog\?\.close/);
   assert.match(appSource, /scope\.defer\(\(\) => candidateCatalog\.close/);

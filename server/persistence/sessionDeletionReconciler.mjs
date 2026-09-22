@@ -22,6 +22,30 @@ function requireMatchingOwner(operation, owner) {
   }
 }
 
+function requireRepositories(appStore) {
+  const operationsRepository = appStore?.repositories?.operations;
+  const sessionsRepository = appStore?.repositories?.sessions;
+  if (!operationsRepository || typeof operationsRepository.listIncomplete !== "function" || typeof operationsRepository.update !== "function") {
+    throw new TypeError("operation repository with listIncomplete() and update() is required");
+  }
+  if (!sessionsRepository || typeof sessionsRepository.find !== "function" || typeof sessionsRepository.delete !== "function") {
+    throw new TypeError("session repository with find() and delete() is required");
+  }
+  return { operationsRepository, sessionsRepository };
+}
+
+function requireReconcilerDependencies({ appStore, sessionReferences, sessionCatalog, sessionOperations, closeSessionHublots, deleteSessionRoutines, now, logger }) {
+  requireFunction(appStore.transaction, "appStore.transaction");
+  requireFunction(sessionReferences?.validate, "sessionReferences.validate");
+  requireNonEmptyString(sessionCatalog?.backend, "sessionCatalog.backend");
+  requireFunction(sessionCatalog?.findById, "sessionCatalog.findById");
+  requireFunction(sessionOperations?.deleteSession, "sessionOperations.deleteSession");
+  requireFunction(closeSessionHublots, "closeSessionHublots");
+  requireFunction(deleteSessionRoutines, "deleteSessionRoutines");
+  requireFunction(now, "now");
+  requireFunction(logger?.error, "logger.error");
+}
+
 /** Complete durable delete-session operations after an unplanned server stop. */
 export async function reconcileSessionDeletions({
   appStore,
@@ -33,27 +57,8 @@ export async function reconcileSessionDeletions({
   now = () => new Date().toISOString(),
   logger = console,
 } = {}) {
-  const operationsRepository = appStore?.repositories?.operations;
-  const sessionsRepository = appStore?.repositories?.sessions;
-  if (!operationsRepository
-    || typeof operationsRepository.listIncomplete !== "function"
-    || typeof operationsRepository.update !== "function") {
-    throw new TypeError("operation repository with listIncomplete() and update() is required");
-  }
-  if (!sessionsRepository
-    || typeof sessionsRepository.find !== "function"
-    || typeof sessionsRepository.delete !== "function") {
-    throw new TypeError("session repository with find() and delete() is required");
-  }
-  requireFunction(appStore.transaction, "appStore.transaction");
-  requireFunction(sessionReferences?.validate, "sessionReferences.validate");
-  requireNonEmptyString(sessionCatalog?.backend, "sessionCatalog.backend");
-  requireFunction(sessionCatalog?.findById, "sessionCatalog.findById");
-  requireFunction(sessionOperations?.deleteSession, "sessionOperations.deleteSession");
-  requireFunction(closeSessionHublots, "closeSessionHublots");
-  requireFunction(deleteSessionRoutines, "deleteSessionRoutines");
-  requireFunction(now, "now");
-  requireFunction(logger?.error, "logger.error");
+  const { operationsRepository, sessionsRepository } = requireRepositories(appStore);
+  requireReconcilerDependencies({ appStore, sessionReferences, sessionCatalog, sessionOperations, closeSessionHublots, deleteSessionRoutines, now, logger });
 
   const timestamp = () => requireNonEmptyString(now(), "session deletion reconciliation timestamp");
   const incomplete = await operationsRepository.listIncomplete();

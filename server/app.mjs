@@ -22,6 +22,29 @@ function migrateCandidateState(state) {
   console.log("[oyster] migrated state: removed dead eventBuffer, patched broadcast");
 }
 
+async function initializeSessionCatalog(state, { scope, SESSIONS_ROOT, jsonlSessionCatalog }) {
+  const { config } = state; const catalogModule = config.PERSISTENT_STORE === "sqlite" ? "sessions/sqliteCatalog.mjs" : "sessions.mjs";
+  state.sessionCatalog = config.PERSISTENT_STORE === "sqlite" ? (await import(bust(catalogModule)))["createSqlite" + "SessionCatalog"]({ databasePath: config.SQLITE_PATH }) : jsonlSessionCatalog;
+  state.sessionCatalogKey = `${config.PERSISTENT_STORE}:${config.SQLITE_PATH ?? SESSIONS_ROOT}:${moduleVersion(catalogModule)}`;
+  if (config.PERSISTENT_STORE === "sqlite") { const candidateCatalog = state.sessionCatalog; scope.defer(() => candidateCatalog.close?.()); }
+  const validateCatalog = validateCatalogAccess; await validateCatalog(state.sessionCatalog, { backend: config.PERSISTENT_STORE ?? "jsonl", cwd: config.PI_DIR });
+}
+
+async function reconcileCandidateSessionDeletions(state, hydratedStore, { closeSessionHublots, deleteSessionRoutines, reconcileSessionDeletions }) {
+  if (state.sessionDeletionReconciled) return;
+  const { appStore } = state;
+  state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations, closeSessionHublots: (id) => closeSessionHublots(state, id), deleteSessionRoutines: (id) => deleteSessionRoutines(state, id) });
+  state.incompleteOperations = new Map(hydratedStore.incompleteOperations.map((entry) => [entry.id, entry])); state.sessionDeletionReconciled = true;
+}
+
+function setupCredentialRefreshes({ scope, credentialService, restartActiveRunners, oauthRefreshByHarness, createClaudeOAuthRefreshService, claudeOAuthCredentialSink, codexOAuthCredentialSink, geminiOAuthCredentialSink }) {
+  const scopedTimer = (callback, delay) => setTimeout(scope.guard(callback), delay);
+  const registerRefresh = (harness, refresh, { startup = false } = {}) => { oauthRefreshByHarness.set(harness, refresh); refresh.start(); if (startup) void refresh.refreshNow({ reason: "startup" }); scope.defer(() => refresh.stop()); };
+  if (claudeOAuthCredentialSink) registerRefresh("claude-code", createClaudeOAuthRefreshService({ rotate: (options) => credentialService.rotateAnthropicOAuth(options), restartRunners: () => restartActiveRunners({ harness: "claude-code", idleOnly: true }), setTimer: scopedTimer }));
+  if (codexOAuthCredentialSink) registerRefresh("codex", createClaudeOAuthRefreshService({ rotate: (options) => credentialService.rotateProviderOAuth("openai-codex", options), restartRunners: () => restartActiveRunners({ harness: "codex", idleOnly: true }), providerLabel: "OpenAI", runnerLabel: "Codex", setTimer: scopedTimer }));
+  if (geminiOAuthCredentialSink) registerRefresh("gemini", createClaudeOAuthRefreshService({ rotate: (options) => geminiOAuthCredentialSink.rotate(options), restartRunners: () => restartActiveRunners({ harness: "gemini", idleOnly: true }), providerLabel: "Google", runnerLabel: "Gemini CLI", setTimer: scopedTimer }), { startup: true });
+}
+
 function createApplicationHandlers({ routeTable, openRoutes, requestContext }) {
   const { json, checkAuth } = requestContext;
   const openRouteKeys = new Set(Object.keys(openRoutes));
@@ -94,19 +117,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const hydratedStore = await validateRepositoryAvailability(appStore);
   migrateCandidateState(state);
 
-  const catalogModule = config.PERSISTENT_STORE === "sqlite" ? "sessions/sqliteCatalog.mjs" : "sessions.mjs"; const catalogKey = `${config.PERSISTENT_STORE}:${config.SQLITE_PATH ?? SESSIONS_ROOT}:${moduleVersion(catalogModule)}`;
-  state.sessionCatalog = config.PERSISTENT_STORE === "sqlite"
-    ? (await import(bust(catalogModule))).createSqliteSessionCatalog({ databasePath: config.SQLITE_PATH })
-    : jsonlSessionCatalog;
-  state.sessionCatalogKey = catalogKey;
-  if (config.PERSISTENT_STORE === "sqlite") {
-    const candidateCatalog = state.sessionCatalog;
-    scope.defer(() => candidateCatalog.close?.());
-  }
-  await validateCatalogAccess(state.sessionCatalog, {
-    backend: config.PERSISTENT_STORE ?? "jsonl",
-    cwd: config.PI_DIR,
-  });
+  await initializeSessionCatalog(state, { scope, SESSIONS_ROOT, jsonlSessionCatalog });
   state.sessionReferences = createSessionReferenceCodec({
     agentDir: config.PI_AGENT_DIR ?? dirname(SESSIONS_ROOT),
     jsonlRoot: SESSIONS_ROOT,
@@ -114,11 +125,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   });
   state.piProcesses = createPiProcessLauncher({ config }); if (!state.hublotSupervisor) state.hublotSupervisor = createHublotSupervisor({ appStore, recordTransition: (id, status, options) => recordHublotTransition(state, id, status, options) });
   state.sessionOperations = createSessionOperations({ config, appStore, sessionReferences: state.sessionReferences });
-  if (!state.sessionDeletionReconciled) {
-    state.sessionDeletionReconciliation = await reconcileSessionDeletions({ appStore, sessionReferences: state.sessionReferences, sessionCatalog: state.sessionCatalog, sessionOperations: state.sessionOperations, closeSessionHublots: (id) => closeSessionHublots(state, id), deleteSessionRoutines: (id) => deleteSessionRoutines(state, id) });
-    state.incompleteOperations = new Map(hydratedStore.incompleteOperations.map((entry) => [entry.id, entry]));
-    state.sessionDeletionReconciled = true;
-  }
+  await reconcileCandidateSessionDeletions(state, hydratedStore, { closeSessionHublots, deleteSessionRoutines, reconcileSessionDeletions });
   const ensureSessionOwner = createSessionOwnerResolver({ appStore, sessionReferences: state.sessionReferences,
     sessionCatalog: state.sessionCatalog, runners: () => state.runners?.values() ?? [] });
   const deleteOwnedSession = createSessionDeletionWorkflow({ appStore, ensureSessionOwner });
@@ -179,9 +186,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   const ampOAuthCredentialSink = config.AMP_BIN ? createAmpOAuthCredentialSink({ bin: config.AMP_BIN, settingsPath: config.AMP_SETTINGS_PATH, markerPath: config.AMP_AUTH_MARKER_PATH }) : null;
   const credentialService = createPiCredentialService({ config, claudeOAuthCredentialSink, codexOAuthCredentialSink, geminiOAuthCredentialSink, ampOAuthCredentialSink });
   const restartActiveRunners = createRestartActiveRunners({ runners: () => state.runners, stopRunner, startRunner });
-  if (claudeOAuthCredentialSink) { const refresh = createClaudeOAuthRefreshService({ rotate: (options) => credentialService.rotateAnthropicOAuth(options), restartRunners: () => restartActiveRunners({ harness: "claude-code", idleOnly: true }), setTimer: (callback, delay) => setTimeout(scope.guard(callback), delay) }); oauthRefreshByHarness.set("claude-code", refresh); refresh.start(); scope.defer(() => refresh.stop()); }
-  if (codexOAuthCredentialSink) { const refresh = createClaudeOAuthRefreshService({ rotate: (options) => credentialService.rotateProviderOAuth("openai-codex", options), restartRunners: () => restartActiveRunners({ harness: "codex", idleOnly: true }), providerLabel: "OpenAI", runnerLabel: "Codex", setTimer: (callback, delay) => setTimeout(scope.guard(callback), delay) }); oauthRefreshByHarness.set("codex", refresh); refresh.start(); scope.defer(() => refresh.stop()); }
-  if (geminiOAuthCredentialSink) { const refresh = createClaudeOAuthRefreshService({ rotate: (options) => geminiOAuthCredentialSink.rotate(options), restartRunners: () => restartActiveRunners({ harness: "gemini", idleOnly: true }), providerLabel: "Google", runnerLabel: "Gemini CLI", setTimer: (callback, delay) => setTimeout(scope.guard(callback), delay) }); oauthRefreshByHarness.set("gemini", refresh); refresh.start(); void refresh.refreshNow({ reason: "startup" }); scope.defer(() => refresh.stop()); }
+  setupCredentialRefreshes({ scope, credentialService, restartActiveRunners, oauthRefreshByHarness, createClaudeOAuthRefreshService, claudeOAuthCredentialSink, codexOAuthCredentialSink, geminiOAuthCredentialSink });
   const credentialRoutes = createCredentialRoutes({ requestContext, credentialService, restartActiveRunners, openRouterRouting, getAmpAuthStatus: () => ampOAuthCredentialSink?.status().configured === true });
   state.oauthFlows ??= new Map(); const oauthRegistry = new Map(); state.oauthFlows.set(generation, oauthRegistry); scope.defer(() => state.oauthFlows.delete(generation));
   const oauthFlowService = createPiOAuthFlowService({ registry: oauthRegistry, credentialService, restartActiveRunners, setTimer: (callback, delay) => setTimeout(scope.guard(callback), delay) }); scope.defer(() => oauthFlowService.shutdown()); const oauthRoutes = createOAuthRoutes({ requestContext, credentialService, flowService: oauthFlowService, restartActiveRunners });

@@ -81,37 +81,30 @@ export function createStableEphemeralState() {
   };
 }
 
+function assertInventoryMetadata(key, metadata) {
+  if (!DURABILITY_CLASSIFICATION_SET.has(metadata.classification)) {
+    throw new Error(`stable state field ${key} has an invalid durability classification`);
+  }
+  if (typeof metadata.reason !== "string" || metadata.reason.trim() === "") {
+    throw new Error(`stable state field ${key} has no classification reason`);
+  }
+  if (!RELOAD_OWNERSHIP_CLASSIFICATION_SET.has(metadata.reloadOwnership)) {
+    throw new Error(`stable state field ${key} has no reload ownership classification`);
+  }
+  const repositoryBacked = REPOSITORY_BACKED_CLASSIFICATIONS.has(metadata.classification);
+  if (repositoryBacked && (typeof metadata.repository !== "string" || metadata.repository.trim() === "")) {
+    throw new Error(`durable or rebuildable stable state field ${key} has no repository`);
+  }
+  if (!repositoryBacked && metadata.repository !== null) {
+    throw new Error(`non-durable stable state field ${key} must not name a repository`);
+  }
+}
+
 export function assertStableStateInventory(state) {
-  if (state === null || typeof state !== "object" || Array.isArray(state)) {
-    throw new TypeError("stable state must be an object");
-  }
-
-  // Reflect.ownKeys prevents non-enumerable or symbol fields from bypassing
-  // the same classification requirement as ordinary object-literal fields.
+  if (state === null || typeof state !== "object" || Array.isArray(state)) throw new TypeError("stable state must be an object");
   for (const key of Reflect.ownKeys(state)) {
-    if (typeof key !== "string" || !Object.hasOwn(STABLE_STATE_INVENTORY, key)) {
-      throw new Error(`stable state field ${String(key)} has no durability classification`);
-    }
+    if (typeof key !== "string" || !Object.hasOwn(STABLE_STATE_INVENTORY, key)) throw new Error(`stable state field ${String(key)} has no durability classification`);
   }
-
-  for (const [key, metadata] of Object.entries(STABLE_STATE_INVENTORY)) {
-    if (!DURABILITY_CLASSIFICATION_SET.has(metadata.classification)) {
-      throw new Error(`stable state field ${key} has an invalid durability classification`);
-    }
-    if (typeof metadata.reason !== "string" || metadata.reason.trim() === "") {
-      throw new Error(`stable state field ${key} has no classification reason`);
-    }
-    if (!RELOAD_OWNERSHIP_CLASSIFICATION_SET.has(metadata.reloadOwnership)) {
-      throw new Error(`stable state field ${key} has no reload ownership classification`);
-    }
-
-    const repositoryBacked = REPOSITORY_BACKED_CLASSIFICATIONS.has(metadata.classification);
-    if (repositoryBacked && (typeof metadata.repository !== "string" || metadata.repository.trim() === "")) {
-      throw new Error(`durable or rebuildable stable state field ${key} has no repository`);
-    }
-    if (!repositoryBacked && metadata.repository !== null) {
-      throw new Error(`non-durable stable state field ${key} must not name a repository`);
-    }
-  }
+  for (const [key, metadata] of Object.entries(STABLE_STATE_INVENTORY)) assertInventoryMetadata(key, metadata);
   return true;
 }

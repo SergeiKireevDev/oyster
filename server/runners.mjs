@@ -398,13 +398,18 @@ export async function createRunnerManager(state, {
     return !name || /^\u23EA [0-9a-f]{4,12}$/.test(name);
   }
 
-  async function maybeTitleSession(runner, sessionState) {
+  function titleRequest(runner, sessionState) {
     const reference = runner.sessionRef;
     const sessionId = runner.sessionId;
-    if (!reference || !sessionId || (state.sessionCatalog?.backend && reference.backend !== state.sessionCatalog.backend) || !titleEligible(runner.sessionName)) return;
-    if ((sessionState.messageCount ?? 0) < 1 || runner.titleSessionId === sessionId || runner.titleLoadingSessionId === sessionId) return;
-    const catalog = state.sessionCatalog;
-    if (!catalog?.messages) return;
+    if (!reference || !sessionId || (state.sessionCatalog?.backend && reference.backend !== state.sessionCatalog.backend) || !titleEligible(runner.sessionName)) return null;
+    if ((sessionState.messageCount ?? 0) < 1 || runner.titleSessionId === sessionId || runner.titleLoadingSessionId === sessionId) return null;
+    return state.sessionCatalog?.messages ? { reference, sessionId, catalog: state.sessionCatalog } : null;
+  }
+
+  async function maybeTitleSession(runner, sessionState) {
+    const request = titleRequest(runner, sessionState);
+    if (!request) return;
+    const { reference, sessionId, catalog } = request;
 
     const identity = reference.backend === "sqlite" ? reference.id : reference.storagePath;
     let messages;
@@ -614,20 +619,23 @@ export async function createRunnerManager(state, {
     return runner;
   }
 
+  function deferRunnerStart(runner) {
+    if (runner.startTimer) return;
+    const timer = setTimer(guardCallback(() => {
+      if (runner.startTimer !== timer) return;
+      runner.startTimer = null;
+      if (!runner.proc && state.runners.has(runner.id)) startRunner(runner);
+    }), 2000);
+    runner.startTimer = timer;
+    timer.unref?.();
+  }
+
   async function startRunner(runner) {
     if (runner.proc) return;
     const nowMs = Date.now();
     // crash-loop guard: if this runner died within 2s of spawning, wait
     if (nowMs - runner.lastSpawnAt < 2000 && runner.startCount > 0) {
-      if (!runner.startTimer) {
-        const timer = setTimer(guardCallback(() => {
-          if (runner.startTimer !== timer) return;
-          runner.startTimer = null;
-          if (!runner.proc && state.runners.has(runner.id)) startRunner(runner);
-        }), 2000);
-        runner.startTimer = timer;
-        timer.unref?.();
-      }
+      deferRunnerStart(runner);
       return;
     }
     runner.lastSpawnAt = nowMs;
@@ -916,20 +924,30 @@ export async function createRunnerManager(state, {
     return runnerInfo(runner);
   }
 
+  function findRunnerByReference(reference) {
+    for (const candidate of state.runners.values()) {
+      if (candidate.sessionRef && sessionReferences.equals(candidate.sessionRef, reference)) return candidate;
+    }
+    return null;
+  }
+
+  async function selectSessionHarness(harness, reference) {
+    const savedSession = !harness && reference?.backend === state.sessionCatalog?.backend
+      ? await state.sessionCatalog.findById(reference.id) : null;
+    return harness ?? savedSession?.harness ?? (reference ? runnerDrivers.compatible(reference)?.id : runnerDrivers.defaultId);
+  }
+
   /** Reuse the runner attached to the full session identity, else spawn one. */
   async function openSessionRunner({ harness = null, sessionRef = null, sessionPath = null, sessionId = null, dir = null }) {
     const inputReference = sessionRef ?? (sessionPath && sessionId
       ? { backend: "jsonl", id: sessionId, storagePath: sessionPath }
       : null);
     const reference = inputReference ? sessionReferences.validate(inputReference) : null;
-    const savedSession = !harness && reference?.backend === state.sessionCatalog?.backend
-      ? await state.sessionCatalog.findById(reference.id) : null;
-    const selectedHarness = harness ?? savedSession?.harness ?? (reference ? runnerDrivers.compatible(reference)?.id : runnerDrivers.defaultId);
+    const selectedHarness = await selectSessionHarness(harness, reference);
     if (!selectedHarness) throw new Error(`no harness can open session ${reference?.id ?? "unknown"}`);
     if (reference) {
-      for (const r of state.runners.values()) {
-        if (r.sessionRef && sessionReferences.equals(r.sessionRef, reference)) return r;
-      }
+      const existing = findRunnerByReference(reference);
+      if (existing) return existing;
     }
     // Brand-new sessions need the driver to establish their durable identity.
     // Saved sessions already have an identity and can remain dormant while read.

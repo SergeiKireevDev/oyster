@@ -491,14 +491,17 @@ function migrationError(migration, error, rollbackError) {
     : new Error(message, { cause: error });
 }
 
-/** Apply each pending migration atomically and return the resulting status. */
-export async function applyMigrations(database, { migrations = APP_MIGRATIONS, now = () => new Date().toISOString() } = {}) {
-  if (!database || typeof database.exec !== "function"
-      || (!(typeof database.get === "function" && typeof database.all === "function" && typeof database.run === "function")
-        && typeof database.prepare !== "function")) {
+function validateMigrationDatabase(database) {
+  const asyncApi = typeof database?.get === "function" && typeof database?.all === "function" && typeof database?.run === "function";
+  if (!database || typeof database.exec !== "function" || (!asyncApi && typeof database.prepare !== "function")) {
     throw new TypeError("application database connection is required");
   }
   if (database.isTransaction) throw new Error("cannot apply application database migrations inside a transaction");
+}
+
+/** Apply each pending migration atomically and return the resulting status. */
+export async function applyMigrations(database, { migrations = APP_MIGRATIONS, now = () => new Date().toISOString() } = {}) {
+  validateMigrationDatabase(database);
   if (typeof now !== "function") throw new TypeError("application database migration clock must be a function");
   validateMigrations(migrations);
 
