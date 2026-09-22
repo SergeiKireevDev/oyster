@@ -1,8 +1,8 @@
 import webPush from "web-push";
-const MAGIC_100 = 100;
-const MAGIC_404 = 404;
-const MAGIC_410 = 410;
-const MAGIC_60 = 60;
+const WORKDIR_NOTIFICATION_MAX_CHARS = 100;
+const HTTP_NOT_FOUND = 404;
+const HTTP_GONE = 410;
+const SESSION_NAME_NOTIFICATION_MAX_CHARS = 60;
 
 
 const CLARIFICATION_METHODS = new Set(["select", "confirm", "input", "editor"]);
@@ -22,8 +22,8 @@ function compactNotificationText(value, limit, keepEnd = false) {
 }
 
 function notificationBody(runner) {
-  const name = compactNotificationText(runner.sessionName, MAGIC_60) || "Untitled session";
-  const workdir = compactNotificationText(runner.dir, MAGIC_100, true);
+  const name = compactNotificationText(runner.sessionName, SESSION_NAME_NOTIFICATION_MAX_CHARS) || "Untitled session";
+  const workdir = compactNotificationText(runner.dir, WORKDIR_NOTIFICATION_MAX_CHARS, true);
   return workdir ? `${name}\n${workdir}` : name;
 }
 
@@ -60,7 +60,7 @@ export async function createWebPushService({
         await push.sendNotification(subscription, JSON.stringify(payload), { TTL: 3600, urgency: "high" });
         await repository.markDelivered(row.endpoint, new Date(now()).toISOString());
       } catch (error) {
-        if (error?.statusCode === MAGIC_404 || error?.statusCode === MAGIC_410) await repository.deleteSubscription(row.endpoint);
+        if (error?.statusCode === HTTP_NOT_FOUND || error?.statusCode === HTTP_GONE) await repository.deleteSubscription(row.endpoint);
         else logger.error(`[oyster] web push delivery failed: ${error?.message ?? error}`);
       }
     }));

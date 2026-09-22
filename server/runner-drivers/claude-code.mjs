@@ -3,7 +3,7 @@ import { redactChildOutput } from "./secret-output.mjs";
 import { randomUUID } from "node:crypto";
 import { validateRunnerDriver } from "./contract.mjs";
 import { assistantMessage, claudeRecordMessages } from "./claude-transcript.mjs";
-const MAGIC_80 = 80;
+const SESSION_NAME_MAX_CHARS = 80;
 const CLAUDE_CODE_HARNESS = "claude-code";
 
 
@@ -206,7 +206,7 @@ function sendPromptCommand(runtime, child, command, emit) {
   if (!child?.stdin?.writable) return false;
   const message = { role: "user", content: String(command.message ?? "") };
   const canonical = { role: "user", content: message.content, timestamp: Date.now() };
-  if (!runtime.sessionName) runtime.sessionName = message.content.trim().split("\n")[0].slice(0, MAGIC_80) || "Claude Code session";
+  if (!runtime.sessionName) runtime.sessionName = message.content.trim().split("\n")[0].slice(0, SESSION_NAME_MAX_CHARS) || "Claude Code session";
   runtime.messages.push(canonical);
   runtime.streaming = true;
   emit({ type: "message_start", message: canonical });

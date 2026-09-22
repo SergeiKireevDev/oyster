@@ -1,6 +1,6 @@
 import { isAbsolute, resolve } from "node:path";
-const MAGIC_1024 = 1024;
-const MAGIC_16 = 16;
+const BYTES_PER_KIBIBYTE = 1024;
+const MAX_PATH_KIBIBYTES = 16;
 
 
 export const APP_SETTING_KEYS = Object.freeze({
@@ -66,7 +66,7 @@ function decodeJson(row, key) {
   catch { throw new Error(`invalid JSON for app setting ${key}`); }
 }
 
-const MAX_PATH_BYTES = MAGIC_16 * MAGIC_1024;
+const MAX_PATH_BYTES = MAX_PATH_KIBIBYTES * BYTES_PER_KIBIBYTE;
 
 function validateWorkdir(value) {
   if (typeof value !== "string" || !value.trim() || !isAbsolute(value)) {

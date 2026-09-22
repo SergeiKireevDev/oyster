@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, constants, existsSync, fstatSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-const MAGIC_OCTAL_600 = 0o600;
+const CREDENTIAL_FILE_MODE = 0o600;
 
 
 function sinkError(message, cause) {
@@ -30,7 +30,7 @@ export function createCodexOAuthCredentialSink({ configDir } = {}) {
     const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
     let descriptor;
     try {
-      descriptor = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, MAGIC_OCTAL_600);
+      descriptor = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, CREDENTIAL_FILE_MODE);
       writeFileSync(descriptor, value);
       fsyncSync(descriptor);
       closeSync(descriptor);

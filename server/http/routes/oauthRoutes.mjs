@@ -1,12 +1,12 @@
-const MAGIC_1024 = 1024;
-const MAGIC_200 = 200;
-const MAGIC_202 = 202;
-const MAGIC_40 = 40;
-const MAGIC_400 = 400;
-const MAGIC_413 = 413;
-const MAGIC_503 = 503;
+const BYTES_PER_KIBIBYTE = 1024;
+const HTTP_OK = 200;
+const HTTP_ACCEPTED = 202;
+const MAX_OAUTH_BODY_KIBIBYTES = 40;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_CONTENT_TOO_LARGE = 413;
+const HTTP_SERVICE_UNAVAILABLE = 503;
 
-const MAX_OAUTH_BODY_LENGTH = MAGIC_40 * MAGIC_1024;
+const MAX_OAUTH_BODY_LENGTH = MAX_OAUTH_BODY_KIBIBYTES * BYTES_PER_KIBIBYTE;
 const MAX_PROVIDER_LENGTH = 256;
 const FLOW_ID = /^[0-9a-f]{64}$/;
 const PROVIDER_CONTROL_CHARACTERS = /[\x00-\x1f\x7f]/u;
@@ -113,7 +113,7 @@ async function restartHarnesses(restartActiveRunners, harnesses) {
 }
 
 function sendOAuthRemovalRestartFailure(json, res, result) {
-  json(res, MAGIC_503, {
+  json(res, HTTP_SERVICE_UNAVAILABLE, {
     error: "OAuth credential removed but harness runners could not be restarted",
     code: "runner_restart_failed",
     ...result,
@@ -137,21 +137,21 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
 
   async function readJson(req, res, url) {
     if (url?.search) {
-      json(res, MAGIC_400, { error: "OAuth requests require a JSON body without query parameters" });
+      json(res, HTTP_BAD_REQUEST, { error: "OAuth requests require a JSON body without query parameters" });
       return undefined;
     }
     let raw;
     try {
       raw = await readBody(req, MAX_OAUTH_BODY_LENGTH);
     } catch (error) {
-      if (error?.code === "body_too_large") json(res, MAGIC_413, { error: "request body too large" });
-      else json(res, MAGIC_400, { error: "request body could not be read" });
+      if (error?.code === "body_too_large") json(res, HTTP_CONTENT_TOO_LARGE, { error: "request body too large" });
+      else json(res, HTTP_BAD_REQUEST, { error: "request body could not be read" });
       return undefined;
     }
     try {
       return JSON.parse(raw);
     } catch {
-      json(res, MAGIC_400, { error: "invalid JSON" });
+      json(res, HTTP_BAD_REQUEST, { error: "invalid JSON" });
       return undefined;
     }
   }
@@ -174,7 +174,7 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
       if (body === undefined) return;
       const input = providerInput(body);
       if (input.error || typeof body.replace !== "boolean") {
-        json(res, MAGIC_400, { error: input.error ?? "replace must be true or false" });
+        json(res, HTTP_BAD_REQUEST, { error: input.error ?? "replace must be true or false" });
         return;
       }
       try {
@@ -189,7 +189,7 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
           operationError(res, Object.assign(new Error("replace required"), { code: "credential_replace_required" }));
           return;
         }
-        json(res, MAGIC_202, { flow: await flowService.start(input.provider, { replace: body.replace, harness: input.harness }) });
+        json(res, HTTP_ACCEPTED, { flow: await flowService.start(input.provider, { replace: body.replace, harness: input.harness }) });
       } catch (error) {
         operationError(res, error);
       }
@@ -198,14 +198,14 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
       const body = await readJson(req, res, url);
       if (body === undefined) return;
       const input = flowInput(body);
-      if (input.error) { json(res, MAGIC_400, { error: input.error }); return; }
+      if (input.error) { json(res, HTTP_BAD_REQUEST, { error: input.error }); return; }
       try {
         const flow = await flowService.getStatus(input.flowId);
         if (!flow) {
           operationError(res, Object.assign(new Error("not found"), { code: "oauth_flow_not_found" }));
           return;
         }
-        json(res, MAGIC_200, { flow });
+        json(res, HTTP_OK, { flow });
       } catch (error) {
         operationError(res, error);
       }
@@ -215,18 +215,18 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
       if (body === undefined) return;
       const input = flowInput(body);
       if (input.error || typeof body.requestId !== "string" || !FLOW_ID.test(body.requestId) || typeof body.value !== "string") {
-        json(res, MAGIC_400, { error: input.error ?? "valid requestId and string value required" });
+        json(res, HTTP_BAD_REQUEST, { error: input.error ?? "valid requestId and string value required" });
         return;
       }
-      try { json(res, MAGIC_202, { flow: await flowService.respond(input.flowId, body.requestId, body.value) }); }
+      try { json(res, HTTP_ACCEPTED, { flow: await flowService.respond(input.flowId, body.requestId, body.value) }); }
       catch (error) { operationError(res, error); }
     },
     "POST /oauth/cancel": async (req, res, url) => {
       const body = await readJson(req, res, url);
       if (body === undefined) return;
       const input = flowInput(body);
-      if (input.error) { json(res, MAGIC_400, { error: input.error }); return; }
-      try { json(res, MAGIC_200, { flow: await flowService.cancel(input.flowId) }); }
+      if (input.error) { json(res, HTTP_BAD_REQUEST, { error: input.error }); return; }
+      try { json(res, HTTP_OK, { flow: await flowService.cancel(input.flowId) }); }
       catch (error) { operationError(res, error); }
     },
     "DELETE /oauth": async (req, res, url) => {
@@ -234,11 +234,11 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
       if (body === undefined) return;
       const input = providerInput(body);
       if (input.error || body.restart !== true) {
-        json(res, MAGIC_400, { error: input.error ?? "explicit restart confirmation required" });
+        json(res, HTTP_BAD_REQUEST, { error: input.error ?? "explicit restart confirmation required" });
         return;
       }
       if (typeof restartActiveRunners !== "function" || typeof credentialService.logoutOAuth !== "function") {
-        json(res, MAGIC_503, { error: "OAuth service unavailable" });
+        json(res, HTTP_SERVICE_UNAVAILABLE, { error: "OAuth service unavailable" });
         return;
       }
 
@@ -257,7 +257,7 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
       try {
         const restart = await restartHarnesses(restartActiveRunners, harnesses);
         if (restart.status === "partial") {
-          json(res, MAGIC_503, {
+          json(res, HTTP_SERVICE_UNAVAILABLE, {
             error: "OAuth credential removed but some harness runners failed to restart",
             code: "runner_restart_partial",
             ...result,
@@ -265,7 +265,7 @@ export function createOAuthRoutes({ requestContext, credentialService, flowServi
           });
           return;
         }
-        json(res, MAGIC_200, { ...result, restart });
+        json(res, HTTP_OK, { ...result, restart });
       } catch {
         sendOAuthRemovalRestartFailure(json, res, result);
       }

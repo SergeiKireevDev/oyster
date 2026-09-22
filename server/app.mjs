@@ -1,8 +1,8 @@
-const MAGIC_400 = 400;
-const MAGIC_401 = 401;
-const MAGIC_404 = 404;
-const MAGIC_405 = 405;
-const MAGIC_429 = 429;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_NOT_FOUND = 404;
+const HTTP_METHOD_NOT_ALLOWED = 405;
+const HTTP_TOO_MANY_REQUESTS = 429;
 
 /** Hot-reloadable HTTP application composition. Durable state remains owned by server.mjs. */
 import { statSync } from "node:fs";
@@ -56,7 +56,7 @@ function createApplicationHandlers({ routeTable, openRoutes, requestContext }) {
   const openRouteKeys = new Set(Object.keys(openRoutes));
   const knownPaths = new Set([...routeTable.keys()].map((key) => key.slice(key.indexOf(" ") + 1)));
   async function handleRequest(req, res) {
-    let url; try { url = new URL(req.url ?? "/", "http://localhost"); } catch { json(res, MAGIC_400, { error: "invalid request URL" }); return; }
+    let url; try { url = new URL(req.url ?? "/", "http://localhost"); } catch { json(res, HTTP_BAD_REQUEST, { error: "invalid request URL" }); return; }
     const key = `${req.method} ${url.pathname}`;
     const staticFallback = routeTable.get(`${req.method} /*`);
     if (staticFallback?.(req, res, url)) return;
@@ -64,11 +64,11 @@ function createApplicationHandlers({ routeTable, openRoutes, requestContext }) {
     if (open) return open(req, res, url);
     // Every privileged route requires an explicit credential. Loopback is not an authentication boundary.
     const auth = checkAuth(req, url);
-    if (auth !== "ok") { json(res, auth === "throttled" ? MAGIC_429 : MAGIC_401, { error: auth === "throttled" ? "too many auth failures — try again later" : "unauthorized" }); return; }
+    if (auth !== "ok") { json(res, auth === "throttled" ? HTTP_TOO_MANY_REQUESTS : HTTP_UNAUTHORIZED, { error: auth === "throttled" ? "too many auth failures — try again later" : "unauthorized" }); return; }
     const route = routeTable.get(key);
     if (route) return route(req, res, url);
     const pathKnown = knownPaths.has(url.pathname);
-    json(res, pathKnown ? MAGIC_405 : MAGIC_404, { error: pathKnown ? "method not allowed" : "not found" });
+    json(res, pathKnown ? HTTP_METHOD_NOT_ALLOWED : HTTP_NOT_FOUND, { error: pathKnown ? "method not allowed" : "not found" });
   }
   return { handleRequest };
 }

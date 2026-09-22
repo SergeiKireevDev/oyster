@@ -4,11 +4,11 @@ import {
   readFileSync, realpathSync, renameSync, rmSync, writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
-const MAGIC_1000 = 1000;
-const MAGIC_30 = 30;
-const MAGIC_32 = 32;
-const MAGIC_60 = 60;
-const MAGIC_OCTAL_600 = 0o600;
+const MILLISECONDS_PER_SECOND = 1000;
+const DEFAULT_REFRESH_MARGIN_MINUTES = 30;
+const OAUTH_RANDOM_BYTES = 32;
+const SECONDS_PER_MINUTE = 60;
+const CREDENTIAL_FILE_MODE = 0o600;
 
 const AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -142,7 +142,7 @@ export function createGeminiOAuthCredentialSink({
     const temporaryPath = `${credentialPath}.tmp-${process.pid}-${randomUUID()}`;
     let descriptor;
     try {
-      descriptor = openSync(temporaryPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, MAGIC_OCTAL_600);
+      descriptor = openSync(temporaryPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, CREDENTIAL_FILE_MODE);
       writeFileSync(descriptor, `${JSON.stringify({ type: "oauth", access: credential.access, refresh: credential.refresh, expires: credential.expires })}\n`);
       fsyncSync(descriptor);
       closeSync(descriptor);
@@ -157,9 +157,9 @@ export function createGeminiOAuthCredentialSink({
 
   async function login(callbacks) {
     const { clientId: oauthClientId, clientSecret: oauthClientSecret } = oauthClient();
-    const verifier = randomBytes(MAGIC_32).toString("base64url");
+    const verifier = randomBytes(OAUTH_RANDOM_BYTES).toString("base64url");
     const challenge = createHash("sha256").update(verifier).digest("base64url");
-    const state = randomBytes(MAGIC_32).toString("hex");
+    const state = randomBytes(OAUTH_RANDOM_BYTES).toString("hex");
     const authorization = new URL(AUTHORIZE_URL);
     for (const [key, value] of Object.entries({
       client_id: oauthClientId,
@@ -191,13 +191,13 @@ export function createGeminiOAuthCredentialSink({
     if (typeof payload.refresh_token !== "string" || !payload.refresh_token) {
       throw oauthError("Google OAuth did not return a refresh token");
     }
-    const credential = { type: "oauth", access: payload.access_token, refresh: payload.refresh_token, expires: now() + payload.expires_in * MAGIC_1000 };
+    const credential = { type: "oauth", access: payload.access_token, refresh: payload.refresh_token, expires: now() + payload.expires_in * MILLISECONDS_PER_SECOND };
     write(credential);
     return Object.freeze(credential);
   }
 
   let deadRefreshToken = null;
-  async function rotate({ marginMs = MAGIC_30 * MAGIC_60 * MAGIC_1000, force = false, reason = "manual" } = {}) {
+  async function rotate({ marginMs = DEFAULT_REFRESH_MARGIN_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND, force = false, reason = "manual" } = {}) {
     const credential = read();
     if (!credential) return Object.freeze({ outcome: "not_configured", reason });
     if (!force && credential.expires - now() > marginMs) return Object.freeze({ outcome: "not_needed", reason, expiresAt: credential.expires });
@@ -226,7 +226,7 @@ export function createGeminiOAuthCredentialSink({
       type: "oauth",
       access: payload.access_token,
       refresh: typeof payload.refresh_token === "string" && payload.refresh_token ? payload.refresh_token : credential.refresh,
-      expires: now() + payload.expires_in * MAGIC_1000,
+      expires: now() + payload.expires_in * MILLISECONDS_PER_SECOND,
     };
     write(next);
     deadRefreshToken = null;

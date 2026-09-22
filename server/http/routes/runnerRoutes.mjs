@@ -2,26 +2,26 @@ import { runnerHasSessionIdentity } from "../../session-references.mjs";
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
 import { normalizeLastEventId, sseDataFrame } from "../../sse.mjs";
-const MAGIC_1000 = 1000;
-const MAGIC_1024 = 1024;
-const MAGIC_200 = 200;
-const MAGIC_202 = 202;
-const MAGIC_2048 = 2048;
-const MAGIC_25_000 = 25_000;
-const MAGIC_25000 = 25000;
-const MAGIC_30 = 30;
-const MAGIC_300 = 300;
-const MAGIC_400 = 400;
-const MAGIC_404 = 404;
-const MAGIC_409 = 409;
-const MAGIC_5 = 5;
-const MAGIC_500 = 500;
-const MAGIC_503 = 503;
-const MAGIC_60 = 60;
+const MILLISECONDS_PER_SECOND = 1000;
+const BYTES_PER_KIBIBYTE = 1024;
+const HTTP_OK = 200;
+const HTTP_ACCEPTED = 202;
+const SSE_INITIAL_PADDING_LENGTH = 2048;
+const STOP_ATTENTION_TIMEOUT_MS = 25_000;
+const RESTART_DELAY_MS = 25000;
+const SUBAGENT_TIMEOUT_MINUTES = 30;
+const RUNNER_RESTART_DELAY_MS = 300;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_NOT_FOUND = 404;
+const HTTP_CONFLICT = 409;
+const MAX_PROMPT_MIBIBYTES = 5;
+const HTTP_INTERNAL_SERVER_ERROR = 500;
+const HTTP_SERVICE_UNAVAILABLE = 503;
+const SECONDS_PER_MINUTE = 60;
 const NO_SUCH_RUNNER_ERROR = "no such runner";
 
 
-const MAX_PROMPT_BYTES = MAGIC_5 * MAGIC_1024 * MAGIC_1024;
+const MAX_PROMPT_BYTES = MAX_PROMPT_MIBIBYTES * BYTES_PER_KIBIBYTE * BYTES_PER_KIBIBYTE;
 const MAX_PARENT_SESSION_ID_BYTES = 512;
 const MAX_SUBAGENT_NAME_BYTES = 256;
 const MAX_UI_REQUEST_TEXT_BYTES = 4096;
@@ -80,7 +80,7 @@ async function streamSubagentLifecycle({
   setIntervalImpl, clearIntervalImpl, setTimeoutImpl, clearTimeoutImpl, subagentTimeoutMs,
 }) {
   const writeEvent = (event) => res.write(`${JSON.stringify(event)}\n`);
-  res.writeHead(MAGIC_200, {
+  res.writeHead(HTTP_OK, {
     "content-type": "application/x-ndjson; charset=utf-8",
     "cache-control": "no-cache, no-transform",
     "x-accel-buffering": "no",
@@ -148,7 +148,7 @@ async function streamSubagentLifecycle({
   if (!done) {
     heartbeat = setIntervalImpl(() => {
       if (!res.writableEnded && !res.destroyed) writeEvent({ type: "heartbeat", timestamp: Date.now() });
-    }, MAGIC_25_000);
+    }, STOP_ATTENTION_TIMEOUT_MS);
     heartbeat?.unref?.();
     timer = setTimeoutImpl(() => fail("Subagent timed out."), subagentTimeoutMs);
     timer?.unref?.();
@@ -210,7 +210,7 @@ export function createRunnerRoutes({
   clearIntervalImpl = clearInterval,
   setTimeoutImpl = setTimeout,
   clearTimeoutImpl = clearTimeout,
-  subagentTimeoutMs = MAGIC_30 * MAGIC_60 * MAGIC_1000,
+  subagentTimeoutMs = SUBAGENT_TIMEOUT_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND,
   resolvePath = resolve,
   isDirectory = (path) => statSync(path).isDirectory(),
 }) {
@@ -294,7 +294,7 @@ export function createRunnerRoutes({
       const runner = await runnerFromReq(url);
       // Subscribing is a read-only operation. Keep a stopped runner dormant;
       // commands sent through /rpc can revive it when work is requested.
-      res.writeHead(MAGIC_200, {
+      res.writeHead(HTTP_OK, {
         "content-type": "text/event-stream",
         "cache-control": "private, no-store, no-cache, must-revalidate, no-transform",
         "cdn-cache-control": "no-store",
@@ -306,7 +306,7 @@ export function createRunnerRoutes({
         "x-accel-buffering": "no",
       });
       res.flushHeaders?.();
-      res.write(`retry: 2000\n: connected ${" ".repeat(MAGIC_2048)}\n\n`);
+      res.write(`retry: 2000\n: connected ${" ".repeat(SSE_INITIAL_PADDING_LENGTH)}\n\n`);
       res.runnerId = runner.id;
       state.sseClients.add(res);
 
@@ -340,7 +340,7 @@ export function createRunnerRoutes({
             return;
           }
           res.write(sseDataFrame(JSON.stringify({ type: "ping", _server: true })));
-        }, MAGIC_25000);
+        }, RESTART_DELAY_MS);
         ping?.unref?.();
       }
     },
@@ -349,7 +349,7 @@ export function createRunnerRoutes({
       const command = await readJsonBody(req, res);
       if (command === undefined) return;
       if (!isJsonObject(command) || typeof command.type !== "string" || !command.type.trim()) {
-        json(res, MAGIC_400, { error: "command must be an object with a non-empty string `type`" });
+        json(res, HTTP_BAD_REQUEST, { error: "command must be an object with a non-empty string `type`" });
         return;
       }
       const runner = await runnerFromReq(url);
@@ -357,7 +357,7 @@ export function createRunnerRoutes({
       // read-only visit into a live agent process. User commands still autostart.
       const readOnly = command.type === "get_state" || command.type === "get_messages";
       const queued = await sendToRunner(runner, command, { autostart: !readOnly });
-      json(res, queued ? MAGIC_202 : MAGIC_503, queued
+      json(res, queued ? HTTP_ACCEPTED : HTTP_SERVICE_UNAVAILABLE, queued
         ? { queued: true, runner: runner.id, ...(runner.resumeId ? { pendingResume: true } : {}) }
         : { error: "Agent process unavailable" });
     },
@@ -365,33 +365,33 @@ export function createRunnerRoutes({
     "POST /runner/transcript/sync": async (_req, res, url) => {
       const runner = await runnerFromReq(url);
       if (runner.harness !== "claude-code") {
-        json(res, MAGIC_409, { error: "transcript polling is only available for Claude Code runners" });
+        json(res, HTTP_CONFLICT, { error: "transcript polling is only available for Claude Code runners" });
         return;
       }
       if (!runner.sessionId) {
-        json(res, MAGIC_409, { error: "Claude Code session identity is not available yet" });
+        json(res, HTTP_CONFLICT, { error: "Claude Code session identity is not available yet" });
         return;
       }
       try {
         const result = await syncClaudeTranscript({ sessionId: runner.sessionId, cwd: runner.dir });
         if (result.reference) await updateRunnerSessionReference(runner, result.reference);
         disableCaching(res);
-        json(res, MAGIC_200, result);
+        json(res, HTTP_OK, result);
       } catch (error) {
         console.error(`[oyster] cannot sync Claude transcript ${runner.sessionId}: ${errorMessage(error)}`);
-        json(res, MAGIC_500, { error: errorMessage(error) });
+        json(res, HTTP_INTERNAL_SERVER_ERROR, { error: errorMessage(error) });
       }
     },
 
     "GET /runners": (_req, res) => {
       disableCaching(res);
-      json(res, MAGIC_200, { runners: listRunnerInfo(), harnesses: runnerHarnesses() });
+      json(res, HTTP_OK, { runners: listRunnerInfo(), harnesses: runnerHarnesses() });
     },
 
     "POST /runner/attention/read": async (_req, res, url) => {
       const runner = await runnerFromReq(url);
       acknowledgeRunnerAttention(runner);
-      json(res, MAGIC_200, { runner: runner.id, attentionStatus: runner.attentionStatus ?? null, attentionUnread: false });
+      json(res, HTTP_OK, { runner: runner.id, attentionStatus: runner.attentionStatus ?? null, attentionUnread: false });
     },
 
     // Long-polls until the runner's browser answers, cancels, or the request
@@ -401,29 +401,29 @@ export function createRunnerRoutes({
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
       const bodyError = validateUiRequestBody(body);
-      if (bodyError) { json(res, MAGIC_400, { error: bodyError }); return; }
+      if (bodyError) { json(res, HTTP_BAD_REQUEST, { error: bodyError }); return; }
       const runner = state.runners.get(String(url.searchParams.get("runner") ?? ""));
-      if (!runner) { json(res, MAGIC_404, { error: NO_SUCH_RUNNER_ERROR }); return; }
+      if (!runner) { json(res, HTTP_NOT_FOUND, { error: NO_SUCH_RUNNER_ERROR }); return; }
       const controller = new AbortController();
       res.once?.("close", () => controller.abort());
       disableCaching(res);
-      json(res, MAGIC_200, await requestRunnerUi(runner, uiRequestPayload(body), { signal: controller.signal }));
+      json(res, HTTP_OK, await requestRunnerUi(runner, uiRequestPayload(body), { signal: controller.signal }));
     },
 
     "DELETE /runners": async (_req, res, url) => {
       const runner = state.runners.get(String(url.searchParams.get("id") ?? ""));
       if (!runner) {
-        json(res, MAGIC_404, { error: NO_SUCH_RUNNER_ERROR });
+        json(res, HTTP_NOT_FOUND, { error: NO_SUCH_RUNNER_ERROR });
         return;
       }
       await stopRunnerFamily(runner);
-      json(res, MAGIC_200, { stopped: runner.id });
+      json(res, HTTP_OK, { stopped: runner.id });
     },
 
     "DELETE /runner/empty": async (_req, res, url) => {
       const runner = state.runners.get(String(url.searchParams.get("id") ?? ""));
       if (!runner) {
-        json(res, MAGIC_404, { error: NO_SUCH_RUNNER_ERROR });
+        json(res, HTTP_NOT_FOUND, { error: NO_SUCH_RUNNER_ERROR });
         return;
       }
       // Older runners can retain an identity after their agent session disappeared.
@@ -433,7 +433,7 @@ export function createRunnerRoutes({
         missingSession = (await state.sessionCatalog.findById(runner.sessionRef.id)) == null;
       }
       if (runner.proc || runner.busy || (runnerHasSessionIdentity(runner) && !missingSession)) {
-        json(res, MAGIC_409, { error: "only stopped runners without a saved session can be deleted" });
+        json(res, HTTP_CONFLICT, { error: "only stopped runners without a saved session can be deleted" });
         return;
       }
       await state.appStore?.repositories?.runners?.delete(runner.id);
@@ -443,7 +443,7 @@ export function createRunnerRoutes({
         await state.appSettings?.setDefaultRunnerId(null);
       }
       runnersChanged();
-      json(res, MAGIC_200, { deleted: runner.id, runners: listRunnerInfo() });
+      json(res, HTTP_OK, { deleted: runner.id, runners: listRunnerInfo() });
     },
 
     "POST /restart": async (_req, res, url) => {
@@ -451,9 +451,9 @@ export function createRunnerRoutes({
       await stopRunner(runner);
       const restartTimer = setTimeoutImpl(async () => {
         if (state.runners.has(runner.id)) await startRunner(runner);
-      }, MAGIC_300);
+      }, RUNNER_RESTART_DELAY_MS);
       restartTimer?.unref?.();
-      json(res, MAGIC_202, { restarting: true, runner: runner.id });
+      json(res, HTTP_ACCEPTED, { restarting: true, runner: runner.id });
     },
 
     "POST /subagents": async (req, res) => {
@@ -465,7 +465,7 @@ export function createRunnerRoutes({
         return;
       }
       if (typeof spawnRunner !== "function" || typeof observeRunner !== "function") {
-        json(res, MAGIC_503, { error: "managed subagents are unavailable" });
+        json(res, HTTP_SERVICE_UNAVAILABLE, { error: "managed subagents are unavailable" });
         return;
       }
 
@@ -490,18 +490,18 @@ export function createRunnerRoutes({
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
       const bodyError = validateOpenSessionBody(body);
-      if (bodyError) return json(res, MAGIC_400, { error: bodyError });
+      if (bodyError) return json(res, HTTP_BAD_REQUEST, { error: bodyError });
       const requestedSession = body.sessionKey ?? body.sessionPath;
       const harness = body.harness ?? null;
       const harnessError = validateOpenSessionHarness({ harness, requestedSession });
-      if (harnessError) return json(res, MAGIC_400, { error: harnessError });
+      if (harnessError) return json(res, HTTP_BAD_REQUEST, { error: harnessError });
       const reference = await openSessionReference(body, requestedSession);
       if (reference.error) return json(res, reference.status, { error: reference.error });
       const directory = resolveOpenSessionDir(body, reference.sessionRef, reference.persistedSession);
       if (directory.error) return json(res, directory.status, { error: directory.error });
       if (directory.dir) state.currentDir = directory.dir;
       const runner = await openSessionRunner({ harness, sessionRef: reference.sessionRef, dir: directory.dir });
-      json(res, MAGIC_200, { runner: runnerInfo(runner) });
+      json(res, HTTP_OK, { runner: runnerInfo(runner) });
     },
   };
 }

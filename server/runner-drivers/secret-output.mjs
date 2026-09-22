@@ -1,6 +1,6 @@
 import { Transform } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
-const MAGIC_1024 = 1024;
+const BYTES_PER_KIBIBYTE = 1024;
 
 
 /** Guard native diagnostic/protocol streams before runner logging, SSE or sinks. */
@@ -19,7 +19,7 @@ export function redactChildOutput(child, secrets = []) {
         // Split only at a newline, or sufficiently far before an incomplete
         // key. Protocol lines should not be delayed waiting for another event.
         let end = pending.lastIndexOf("\n") + 1;
-        if (!end && pending.length > MAGIC_1024 * MAGIC_1024) end = pending.length - overlap;
+        if (!end && pending.length > BYTES_PER_KIBIBYTE * BYTES_PER_KIBIBYTE) end = pending.length - overlap;
         if (end) {
           // Do not cut through a key spanning a forced boundary.
           for (const value of values) {

@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-const MAGIC_512 = 512;
+const MAX_CHECKPOINT_FIELD_LENGTH = 512;
 
 
 export const LEGACY_CHECKPOINTS_PATH = join(homedir(), ".pi", "agent", "checkpoints.json");
@@ -10,7 +10,7 @@ export const LEGACY_CHECKPOINTS_PATH = join(homedir(), ".pi", "agent", "checkpoi
 import { requireFunction } from "../validation.mjs";
 
 function validCheckpointIdentity(value) {
-  return typeof value === "string" && value.length > 0 && value.length <= MAGIC_512 && value === value.trim()
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_CHECKPOINT_FIELD_LENGTH && value === value.trim()
     && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
 }
 

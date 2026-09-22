@@ -4,15 +4,15 @@ import { isAbsolute, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-const MAGIC_100 = 100;
-const MAGIC_1000 = 1000;
-const MAGIC_1024 = 1024;
-const MAGIC_200 = 200;
-const MAGIC_2000 = 2000;
-const MAGIC_300 = 300;
-const MAGIC_400 = 400;
-const MAGIC_65535 = 65535;
-const MAGIC_NEG_10 = -10;
+const MAX_GROUPED_WIDGET_PATHS = 100;
+const MILLISECONDS_PER_SECOND = 1000;
+const BYTES_PER_KIBIBYTE = 1024;
+const HTTP_OK = 200;
+const PROCESS_KILL_GRACE_MS = 2000;
+const HTTP_REDIRECT_MIN = 300;
+const HTTP_BAD_REQUEST = 400;
+const MAX_TCP_PORT = 65535;
+const ROUTINE_LOG_TAIL_COUNT_NEGATIVE_SLICE = -10;
 const PINNED_WIDGETS_ROUTE = "/pinned-widgets";
 
 
@@ -29,7 +29,7 @@ const PINNED_WIDGETS_ROUTE = "/pinned-widgets";
  * through the brokered `POST /runner/ui-request` clarification dialog.
  */
 
-const MAX_BASH_OUTPUT_BYTES = MAGIC_200 * MAGIC_1024;
+const MAX_BASH_OUTPUT_BYTES = HTTP_OK * BYTES_PER_KIBIBYTE;
 
 function text(message, structuredContent) {
   return { content: [{ type: "text", text: message }], ...(structuredContent ? { structuredContent } : {}) };
@@ -54,9 +54,9 @@ function runBash(spawnImpl, command, { cwd, sudoPassword, timeoutSeconds, signal
     child.stderr.on("data", collect);
     const kill = () => {
       try { child.kill("SIGTERM"); } catch {}
-      setTimeout(() => { try { child.kill("SIGKILL"); } catch {} }, MAGIC_2000).unref();
+      setTimeout(() => { try { child.kill("SIGKILL"); } catch {} }, PROCESS_KILL_GRACE_MS).unref();
     };
-    const timer = timeoutSeconds ? setTimeout(() => { timedOut = true; kill(); }, timeoutSeconds * MAGIC_1000) : null;
+    const timer = timeoutSeconds ? setTimeout(() => { timedOut = true; kill(); }, timeoutSeconds * MILLISECONDS_PER_SECOND) : null;
     const onAbort = () => kill();
     signal?.addEventListener("abort", onAbort, { once: true });
     const finish = (error, exitCode) => {
@@ -98,7 +98,7 @@ async function routineStatusTool({ api, renderText, name }) {
   const { routines } = await api("GET", "/routines");
   const routine = routines.find((candidate) => candidate.name === name);
   if (!routine) throw new Error(`no such routine: ${name}`);
-  const tail = (routine.log ?? []).slice(MAGIC_NEG_10).join("\n");
+  const tail = (routine.log ?? []).slice(ROUTINE_LOG_TAIL_COUNT_NEGATIVE_SLICE).join("\n");
   return renderText(describeRoutine(routine) + (tail ? `\nrecent output:\n${tail}` : ""), routine);
 }
 
@@ -167,7 +167,7 @@ async function listPinnedWidgets({ scope, api, text: renderText, sessionId }) {
   if (sessionId) query.set("sessionId", sessionId);
   const data = await api("GET", `/pinned-widgets?${query}`);
   const all = data.widgets ?? [];
-  const widgets = all.slice(0, MAGIC_100);
+  const widgets = all.slice(0, MAX_GROUPED_WIDGET_PATHS);
   const groups = data.groups ?? [];
   const lines = widgets.map((widget) =>
     `- id=${widget.id} kind=${widget.kind} label=${JSON.stringify(widget.label)}${widget.groupId ? ` group=${widget.groupId}` : ""} status=${widget.availability}`);
@@ -189,7 +189,7 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
 
   async function api(method, path, body, { signal } = {}) {
     const { status, data } = await dispatch(method, path, body, { signal });
-    if (status < MAGIC_200 || status >= MAGIC_300) {
+    if (status < HTTP_OK || status >= HTTP_REDIRECT_MIN) {
       throw Object.assign(new Error(data?.error ?? `${method} ${path} failed (${status})`), { statusCode: status });
     }
     return data ?? {};
@@ -252,13 +252,13 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
       description: z.string().optional().describe("For 'open': optional hublot label"),
       session_id: z.string().optional().describe("For 'open': bind the hublot to this session id instead of the current one"),
       id: z.string().optional().describe("For 'close': hublot id"),
-      port: z.number().int().min(1).max(MAGIC_65535).optional().describe("Required for open: existing local service port; for close: tunnel port"),
+      port: z.number().int().min(1).max(MAX_TCP_PORT).optional().describe("Required for open: existing local service port; for close: tunnel port"),
     },
   }, async (params) => {
     if (params.action === "open") {
       if (params.port === undefined) throw new Error("'open' requires a port between 1 and 65535");
       const data = await api("POST", "/tunnels", {
-        label: params.description?.slice(0, MAGIC_200),
+        label: params.description?.slice(0, HTTP_OK),
         port: params.port,
         sessionId: params.session_id ?? requireSession(),
       });
@@ -330,7 +330,7 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
       "When one task produces four or more documentation or media artifacts, call this once with a descriptive group name and every artifact path.",
     inputSchema: {
       group: z.string().describe("Short descriptive name for the new widget group"),
-      paths: z.array(z.string()).min(2).max(MAGIC_100).describe("Two or more related documentation or media files to pin into the group"),
+      paths: z.array(z.string()).min(2).max(MAX_GROUPED_WIDGET_PATHS).describe("Two or more related documentation or media files to pin into the group"),
       scope: z.enum(["session", "workspace"]).optional().describe("Pin scope; defaults to the current session"),
     },
   }, async (params) => {
@@ -427,7 +427,7 @@ export function createMcpRoutes({ state, requestContext, dispatch, spawnImpl = s
     "POST /mcp": async (req, res, url) => {
       const workdir = requestParameter(url, "workdir");
       if (workdir && !isAbsolute(workdir)) {
-        json(res, MAGIC_400, { error: "workdir must be an absolute path" });
+        json(res, HTTP_BAD_REQUEST, { error: "workdir must be an absolute path" });
         return;
       }
       const runnerId = requestParameter(url, "runner");

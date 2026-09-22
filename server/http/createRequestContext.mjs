@@ -3,20 +3,20 @@ import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { isWithin as within } from "./pathContainment.mjs";
-const MAGIC_10 = 10;
-const MAGIC_100 = 100;
-const MAGIC_1000 = 1000;
-const MAGIC_1024 = 1024;
-const MAGIC_400 = 400;
-const MAGIC_413 = 413;
-const MAGIC_5 = 5;
-const MAGIC_60 = 60;
-const MAGIC_7 = 7;
+const AUTH_FAIL_WINDOW_MINUTES = 10;
+const DEFAULT_RAW_BODY_LIMIT_MIBIBYTES = 100;
+const MILLISECONDS_PER_SECOND = 1000;
+const BYTES_PER_KIBIBYTE = 1024;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_CONTENT_TOO_LARGE = 413;
+const DEFAULT_BODY_LIMIT_MIBIBYTES = 5;
+const SECONDS_PER_MINUTE = 60;
+const BEARER_PREFIX_LENGTH = 7;
 
 
-const DEFAULT_BODY_LIMIT = MAGIC_5 * MAGIC_1024 * MAGIC_1024;
-const DEFAULT_RAW_BODY_LIMIT = MAGIC_100 * MAGIC_1024 * MAGIC_1024;
-const AUTH_FAIL_WINDOW_MS = MAGIC_10 * MAGIC_60 * MAGIC_1000;
+const DEFAULT_BODY_LIMIT = DEFAULT_BODY_LIMIT_MIBIBYTES * BYTES_PER_KIBIBYTE * BYTES_PER_KIBIBYTE;
+const DEFAULT_RAW_BODY_LIMIT = DEFAULT_RAW_BODY_LIMIT_MIBIBYTES * BYTES_PER_KIBIBYTE * BYTES_PER_KIBIBYTE;
+const AUTH_FAIL_WINDOW_MS = AUTH_FAIL_WINDOW_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
 const AUTH_FAIL_MAX = 20;
 const AUTH_FAIL_MAX_CLIENTS = 10_000;
 
@@ -146,7 +146,7 @@ export function createRequestContext(state, { now = Date.now, logger = console }
       return JSON.parse(await readBody(req));
     } catch (error) {
       const oversized = error?.code === "body_too_large";
-      json(res, oversized ? MAGIC_413 : MAGIC_400, {
+      json(res, oversized ? HTTP_CONTENT_TOO_LARGE : HTTP_BAD_REQUEST, {
         error: oversized ? "request body too large" : `invalid JSON: ${error.message}`,
       });
       return undefined;
@@ -177,7 +177,7 @@ export function createRequestContext(state, { now = Date.now, logger = console }
     const bearer = req.headers.authorization;
     return {
       query: url.searchParams.get("token"),
-      bearer: bearer?.startsWith("Bearer ") ? bearer.slice(MAGIC_7) : bearer,
+      bearer: bearer?.startsWith("Bearer ") ? bearer.slice(BEARER_PREFIX_LENGTH) : bearer,
       xAuthToken: req.headers["x-auth-token"],
       xApiKey: req.headers["x-api-key"],
       cookie: parseCookies(req).oyster_token,

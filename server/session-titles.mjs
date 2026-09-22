@@ -1,7 +1,7 @@
-const MAGIC_100 = 100;
-const MAGIC_50 = 50;
-const MAGIC_60_000 = 60_000;
-const MAGIC_8 = 8;
+const MAX_TITLE_SERIALIZED_ENTRIES = 100;
+const MAX_OBJECT_KEYS_PER_LEVEL = 50;
+const DEFAULT_TITLE_TIMEOUT_MS = 60_000;
+const MAX_TITLE_SERIALIZATION_DEPTH = 8;
 
 export const SESSION_TITLE_MESSAGE_LIMIT = 10;
 const MESSAGE_TEXT_LIMIT = 3_000;
@@ -35,14 +35,14 @@ function json(value, limit = MESSAGE_TEXT_LIMIT) {
   };
   const renderObject = (item, depth) => {
     if (ancestors.has(item)) { append('"[circular]"'); return; }
-    if (depth >= MAGIC_8 || entries >= MAGIC_100) { append('"[truncated]"'); return; }
+    if (depth >= MAX_TITLE_SERIALIZATION_DEPTH || entries >= MAX_TITLE_SERIALIZED_ENTRIES) { append('"[truncated]"'); return; }
     ancestors.add(item);
     let keys;
-    try { keys = Object.keys(item).slice(0, MAGIC_50); } catch { keys = []; }
+    try { keys = Object.keys(item).slice(0, MAX_OBJECT_KEYS_PER_LEVEL); } catch { keys = []; }
     const array = Array.isArray(item);
     append(array ? "[" : "{");
     for (const [keyIndex, key] of keys.entries()) {
-      if (remaining <= 1 || entries >= MAGIC_100) break;
+      if (remaining <= 1 || entries >= MAX_TITLE_SERIALIZED_ENTRIES) break;
       if (keyIndex > 0) append(",");
       if (!array) { append(JSON.stringify(key)); append(":"); }
       entries += 1;
@@ -92,7 +92,7 @@ function contentText(content, ancestors = new WeakSet()) {
   ancestors.add(content);
   const rendered = [];
   let length = 0;
-  const blockCount = Math.min(Number(property(content, "length")) || 0, MAGIC_100);
+  const blockCount = Math.min(Number(property(content, "length")) || 0, MAX_TITLE_SERIALIZED_ENTRIES);
   for (let index = 0; index < blockCount && length < MESSAGE_TEXT_LIMIT; index += 1) {
     length = appendRenderedBlock(rendered, length, blockText(property(content, index), ancestors));
   }
@@ -205,7 +205,7 @@ export function summarizeSessionTitle(piProcesses, options = {}) {
         }
         settle(cleanSessionTitle(stdout));
       });
-      const delay = Number.isFinite(configuredTimeout) && configuredTimeout >= 0 ? configuredTimeout : MAGIC_60_000;
+      const delay = Number.isFinite(configuredTimeout) && configuredTimeout >= 0 ? configuredTimeout : DEFAULT_TITLE_TIMEOUT_MS;
       timer = setTimeout(() => {
         settle(null);
         try { proc.kill("SIGKILL"); } catch {}

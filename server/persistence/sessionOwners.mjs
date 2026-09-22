@@ -1,10 +1,10 @@
 import { requireFunction } from "../validation.mjs";
-const MAGIC_256 = 256;
+const MAX_OWNER_ID_LENGTH = 256;
 
 
 function requireSessionId(value) {
   if (typeof value !== "string" || !value || value !== value.trim()
-      || value.length > MAGIC_256 || /[\u0000-\u001f\u007f-\u009f]/.test(value)) {
+      || value.length > MAX_OWNER_ID_LENGTH || /[\u0000-\u001f\u007f-\u009f]/.test(value)) {
     throw new TypeError("session id must be a trimmed string of 1–256 characters without control characters");
   }
   return value;
