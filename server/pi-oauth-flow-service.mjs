@@ -1,10 +1,22 @@
 import { randomBytes as nodeRandomBytes } from "node:crypto";
+const MAGIC_1000 = 1000;
+const MAGIC_1024 = 1024;
+const MAGIC_15 = 15;
+const MAGIC_16 = 16;
+const MAGIC_256 = 256;
+const MAGIC_32 = 32;
+const MAGIC_4 = 4;
+const MAGIC_5 = 5;
+const MAGIC_60 = 60;
+const MAGIC_64 = 64;
+const MAGIC_8 = 8;
+
 
 const ACTIVE_STATUS = "pending";
 const MAX_PROVIDER_LENGTH = 256;
-const MAX_URL_LENGTH = 16 * 1024;
-const MAX_TEXT_LENGTH = 4 * 1024;
-const MAX_RESPONSE_LENGTH = 32 * 1024;
+const MAX_URL_LENGTH = MAGIC_16 * MAGIC_1024;
+const MAX_TEXT_LENGTH = MAGIC_4 * MAGIC_1024;
+const MAX_RESPONSE_LENGTH = MAGIC_32 * MAGIC_1024;
 const MAX_OPTIONS = 32;
 const SAFE_FAILURE_CODES = new Set([
   "credential_busy",
@@ -50,9 +62,9 @@ function validateOAuthFlowDependencies({ registry, credentialService, restartAct
   for (const [fn, label] of [[restartActiveRunners, "restartActiveRunners"], [randomBytes, "randomBytes"], [now, "now"]]) {
     if (typeof fn !== "function") throw new TypeError(`${label} is required`);
   }
-  requireSafeIntegerRange(maxActiveFlows, 1, 32, "maxActiveFlows must be an integer from 1 to 32");
-  requireSafeIntegerRange(inactivityMs, 1000, 60 * 60 * 1000, "inactivityMs must be an integer from 1000 to 3600000");
-  requireSafeIntegerRange(terminalRetentionMs, 0, 60 * 60 * 1000, "terminalRetentionMs must be an integer from 0 to 3600000");
+  requireSafeIntegerRange(maxActiveFlows, 1, MAGIC_32, "maxActiveFlows must be an integer from 1 to 32");
+  requireSafeIntegerRange(inactivityMs, MAGIC_1000, MAGIC_60 * MAGIC_60 * MAGIC_1000, "inactivityMs must be an integer from 1000 to 3600000");
+  requireSafeIntegerRange(terminalRetentionMs, 0, MAGIC_60 * MAGIC_60 * MAGIC_1000, "terminalRetentionMs must be an integer from 0 to 3600000");
   if (typeof setTimer !== "function" || typeof clearTimer !== "function") throw new TypeError("timer functions are required");
 }
 
@@ -67,8 +79,8 @@ export function createPiOAuthFlowService({
   randomBytes = nodeRandomBytes,
   now = Date.now,
   maxActiveFlows = 4,
-  inactivityMs = 15 * 60 * 1000,
-  terminalRetentionMs = 5 * 60 * 1000,
+  inactivityMs = MAGIC_15 * MAGIC_60 * MAGIC_1000,
+  terminalRetentionMs = MAGIC_5 * MAGIC_60 * MAGIC_1000,
   setTimer = setTimeout,
   clearTimer = clearTimeout,
 } = {}) {
@@ -94,10 +106,10 @@ export function createPiOAuthFlowService({
 
   function safeRestart(value) {
     const runnerIds = Array.isArray(value?.runnerIds)
-      ? value.runnerIds.filter((id) => typeof id === "string" && id.length <= 256).slice(0, 1000)
+      ? value.runnerIds.filter((id) => typeof id === "string" && id.length <= MAGIC_256).slice(0, MAGIC_1000)
       : [];
     const failedRunnerIds = Array.isArray(value?.failedRunnerIds)
-      ? value.failedRunnerIds.filter((id) => runnerIds.includes(id)).slice(0, 1000)
+      ? value.failedRunnerIds.filter((id) => runnerIds.includes(id)).slice(0, MAGIC_1000)
       : [];
     const status = value?.status === "restarted" || value?.status === "partial" ? value.status : "failed";
     return Object.freeze({
@@ -146,13 +158,13 @@ export function createPiOAuthFlowService({
   }
 
   function createRandomId(isUsed) {
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      const bytes = randomBytes(32);
+    for (let attempt = 0; attempt < MAGIC_8; attempt += 1) {
+      const bytes = randomBytes(MAGIC_32);
       if (!Buffer.isBuffer(bytes) && !(bytes instanceof Uint8Array)) {
         throw flowError("credential_service_unavailable", "secure OAuth flow IDs are unavailable");
       }
       const id = Buffer.from(bytes).toString("hex");
-      if (id.length === 64 && !isUsed(id)) return id;
+      if (id.length === MAGIC_64 && !isUsed(id)) return id;
     }
     throw flowError("credential_service_unavailable", "could not allocate an OAuth flow ID");
   }
@@ -217,7 +229,7 @@ export function createPiOAuthFlowService({
         const intervalSeconds = info?.intervalSeconds;
         const expiresInSeconds = info?.expiresInSeconds;
         flow.deviceCode = {
-          userCode: boundedText(info?.userCode, "device code", 1024),
+          userCode: boundedText(info?.userCode, "device code", MAGIC_1024),
           verificationUri: safeUrl(info?.verificationUri, "device verification URL"),
           ...(Number.isSafeInteger(intervalSeconds) && intervalSeconds >= 0 ? { intervalSeconds } : {}),
           ...(Number.isSafeInteger(expiresInSeconds) && expiresInSeconds >= 0 ? { expiresInSeconds } : {}),
@@ -235,8 +247,8 @@ export function createPiOAuthFlowService({
           throw flowError("oauth_invalid_callback", "OAuth selection options are invalid");
         }
         const options = prompt.options.map((option) => Object.freeze({
-          id: boundedText(option?.id, "selection option ID", 1024),
-          label: boundedText(option?.label, "selection option label", 1024),
+          id: boundedText(option?.id, "selection option ID", MAGIC_1024),
+          label: boundedText(option?.label, "selection option label", MAGIC_1024),
         }));
         return pendingRequest(flow, {
           kind: "select",

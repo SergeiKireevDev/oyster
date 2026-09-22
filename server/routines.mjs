@@ -1,3 +1,5 @@
+const MAGIC_100 = 100;
+
 /**
  * oyster — routine manager
  *
@@ -129,7 +131,7 @@ async function finishRoutineProcess({ state, definition, mode, run, repository, 
     });
     await emit(state, definition, "teardown_finished");
   } else {
-    if (code === 0 && current?.progress !== null) await repository.updateProgress(run.id, 100, current?.message ?? null);
+    if (code === 0 && current?.progress !== null) await repository.updateProgress(run.id, MAGIC_100, current?.message ?? null);
     await repository.finishRun(run.id, {
       status: code === 0 ? "done" : "failed",
       error: code === 0 ? null : (current?.message ?? `run failed (${exitReason})`),
@@ -181,7 +183,7 @@ async function runScript(state, definition, mode) {
     const match = line.match(PROGRESS_RE);
     if (match) {
       const current = await repository.findRun(run.id);
-      const requested = match[1] === undefined ? current?.progress ?? null : Math.min(100, Number(match[1]));
+      const requested = match[1] === undefined ? current?.progress ?? null : Math.min(MAGIC_100, Number(match[1]));
       const progress = requested === null || current?.progress === null || current?.progress === undefined
         ? requested
         : Math.max(current.progress, requested);

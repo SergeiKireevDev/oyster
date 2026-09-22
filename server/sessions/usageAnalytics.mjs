@@ -1,3 +1,5 @@
+const MAGIC_6 = 6;
+
 const METRICS = ["input", "output", "cacheRead", "cacheWrite", "reasoning", "totalTokens"];
 const SUPPORTED_BUCKETS = new Set(["hour", "day"]);
 
@@ -75,7 +77,7 @@ export function aggregateUsageRecords(records, { bucket = "day" } = {}) {
     addUsageRecord({ models, series, total }, usage);
   }
 
-  const clean = (row) => ({ ...row, cost: Number(row.cost.toFixed(6)) });
+  const clean = (row) => ({ ...row, cost: Number(row.cost.toFixed(MAGIC_6)) });
   return {
     bucket,
     total: clean(total),

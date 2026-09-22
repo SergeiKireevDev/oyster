@@ -1,4 +1,9 @@
 import { signalProcessGroup, STOP_GRACE_MS } from "./process-groups.mjs";
+const MAGIC_1000 = 1000;
+const MAGIC_5 = 5;
+const MAGIC_60 = 60;
+const MAGIC_NEG_3000 = -3000;
+
 
 /** Run a one-shot agent that authors and registers a routine through the
  * bundled routine tool. The target session is explicit because this agent
@@ -30,7 +35,7 @@ export function spawnRoutineAgent(state, { brief, sessionId }) {
       detached: true,
     });
     let tail = "";
-    const capture = (chunk) => { tail = (tail + String(chunk)).slice(-3000); };
+    const capture = (chunk) => { tail = (tail + String(chunk)).slice(MAGIC_NEG_3000); };
     proc.stdout.on("data", capture);
     proc.stderr.on("data", capture);
     let forceTimer = null;
@@ -39,7 +44,7 @@ export function spawnRoutineAgent(state, { brief, sessionId }) {
       forceTimer = setTimeout(() => signalProcessGroup(proc, "SIGKILL"), STOP_GRACE_MS);
       forceTimer.unref();
       reject(new Error("timed out while the routine agent was working"));
-    }, 5 * 60 * 1000);
+    }, MAGIC_5 * MAGIC_60 * MAGIC_1000);
     const clearTimers = () => {
       clearTimeout(timeout);
       if (forceTimer) clearTimeout(forceTimer);

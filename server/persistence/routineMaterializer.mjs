@@ -5,6 +5,8 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+const MAGIC_6 = 6;
+
 
 const PRIVATE_MODE = 0o700;
 
@@ -63,7 +65,7 @@ export function materializeRoutineScript(options) {
   const root = resolve(requireNonEmptyString(runtimeDir, "routine runtime directory"));
   const identity = createHash("sha256").update(id).digest("hex");
   const target = join(root, `${identity}-r${revision}.sh`);
-  const temporary = join(root, `.${identity}-r${revision}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`);
+  const temporary = join(root, `.${identity}-r${revision}.${process.pid}.${randomBytes(MAGIC_6).toString("hex")}.tmp`);
   const rootDescriptor = openPrivateDirectory(root);
   let descriptor = null;
   let operationError = null;

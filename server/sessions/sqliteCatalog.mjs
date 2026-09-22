@@ -4,6 +4,12 @@ import sqlite3 from "sqlite3";
 import { labelOf, transcriptMessage } from "./jsonlCatalog.mjs";
 import { aggregateUsageRecords } from "./usageAnalytics.mjs";
 import { rescoreSearchResults } from "./searchRescore.mjs";
+const MAGIC_1000 = 1000;
+const MAGIC_120 = 120;
+const MAGIC_200 = 200;
+const MAGIC_25 = 25;
+const MAGIC_3 = 3;
+
 const searchQueryUrl = new URL("./searchQuery.mjs", import.meta.url);
 const { ftsSearchExpression, matchSearchText, parseSearchQuery } = await import(`${searchQueryUrl}?v=${statSync(searchQueryUrl).mtimeMs}`);
 
@@ -63,7 +69,7 @@ function openAsyncDatabase(path) {
     const database = new sqlite3.Database(path, sqlite3.OPEN_READONLY, (error) => {
       if (error) reject(error);
       else {
-        database.configure("busyTimeout", 1000);
+        database.configure("busyTimeout", MAGIC_1000);
         resolvePromise(database);
       }
     });
@@ -145,7 +151,7 @@ export function createSqliteSessionCatalog({
       harness: typeof row.harness === "string" && row.harness.trim() ? row.harness : "pi",
       cwd: typeof row.cwd === "string" ? row.cwd : null,
       parentSessionId: typeof row.parent_session_id === "string" ? row.parent_session_id : null,
-      preview: typeof row.first_message === "string" ? row.first_message.slice(0, 120) : null,
+      preview: typeof row.first_message === "string" ? row.first_message.slice(0, MAGIC_120) : null,
       messageCount: Number.isSafeInteger(row.message_count) && row.message_count >= 0 ? row.message_count : 0,
       storagePath,
     };
@@ -238,7 +244,7 @@ export function createSqliteSessionCatalog({
           .map((entry) => ({
             id: entry.id,
             role: entry.message.role,
-            text: (labelOf(entry.message) ?? "").slice(0, 200),
+            text: (labelOf(entry.message) ?? "").slice(0, MAGIC_200),
             timestamp: entry.timestamp ?? null,
           })),
       };
@@ -265,7 +271,7 @@ export function createSqliteSessionCatalog({
         let role = null;
         if (entry.type === "message") {
           role = entry.message?.role ?? null;
-          label = (labelOf(entry.message) ?? "").slice(0, 200);
+          label = (labelOf(entry.message) ?? "").slice(0, MAGIC_200);
         } else if (entry.type === "model_change") label = `model → ${entry.modelId ?? "?"}`;
         else if (entry.type === "thinking_level_change") label = `thinking → ${entry.thinkingLevel ?? "?"}`;
         else if (entry.type === "session_info") label = `named: ${entry.name ?? ""}`;
@@ -327,7 +333,7 @@ export function createSqliteSessionCatalog({
     // Pi's FTS index uses the trigram tokenizer. Terms shorter than three
     // characters cannot be represented by MATCH, so scan in that case to
     // preserve the catalog's quoted-short-term search behavior.
-    const canUseSearchIndex = terms.every((term) => [...term].length >= 3);
+    const canUseSearchIndex = terms.every((term) => [...term].length >= MAGIC_3);
     const hasSearchIndex = canUseSearchIndex && await databaseGet(database,
       "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'session_search_fts'");
     if (!hasSearchIndex) return { candidates: selected, indexedEntries: null };
@@ -371,9 +377,9 @@ export function createSqliteSessionCatalog({
           timestamp: entry.timestamp ?? null,
           snippet: snippet(part.text, match.index, match.length),
         });
-        if (hits.length >= 25) break;
+        if (hits.length >= MAGIC_25) break;
       }
-      if (hits.length >= 25) break;
+      if (hits.length >= MAGIC_25) break;
     }
     return hits;
   }

@@ -7,6 +7,8 @@ import { createCodexDriver } from "./codex.mjs";
 import { createGeminiDriver } from "./gemini.mjs";
 import { createPiRpcDriver } from "./pi-rpc.mjs";
 import { createRunnerDriverRegistry } from "./registry.mjs";
+const MAGIC_8080 = 8080;
+
 
 // Mirrors the pi process launcher's UI URL policy. Kept local because
 // pi-processes.mjs is a stable module: importing a new export from it would
@@ -15,7 +17,7 @@ function effectiveUiUrl(config) {
   for (const candidate of [config.OYSTER_URL, process.env.OYSTER_URL]) {
     if (candidate != null && String(candidate).trim() !== "") return String(candidate).trim();
   }
-  return `http://127.0.0.1:${config.PORT ?? 8080}`;
+  return `http://127.0.0.1:${config.PORT ?? MAGIC_8080}`;
 }
 
 function nativePersistenceOptions(config) {

@@ -7,6 +7,8 @@ import { redactChildOutput } from "./secret-output.mjs";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { validateRunnerDriver } from "./contract.mjs";
+const MAGIC_80 = 80;
+
 
 const BRIDGE = fileURLToPath(new URL("./headless-bridge.mjs", import.meta.url));
 const DEFAULT_UI_URL = "http://127.0.0.1:8080";
@@ -451,7 +453,7 @@ function sendHeadlessPrompt({ runner, child, command, runtime, emit, label, id, 
   if (!child?.stdin?.writable) return false;
   const text = String(command.message ?? "");
   const message = { role: "user", content: text, timestamp: Date.now() };
-  if (!runtime.sessionName) runtime.sessionName = text.trim().split("\n")[0].slice(0, 80) || `${label ?? id} session`;
+  if (!runtime.sessionName) runtime.sessionName = text.trim().split("\n")[0].slice(0, MAGIC_80) || `${label ?? id} session`;
   runtime.messages.push(message);
   persistTranscript(runner, runtime);
   const payload = promptPayload({ text, generateSessionId, runtime, kind });

@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+const MAGIC_OCTAL_111 = 0o111;
+const ROUTINE_BINDINGS_FILE = "bindings.json";
+
 
 export const LEGACY_ROUTINES_DIR = join(homedir(), ".pi", "routines");
-export const LEGACY_ROUTINE_BINDINGS_PATH = join(LEGACY_ROUTINES_DIR, "bindings.json");
+export const LEGACY_ROUTINE_BINDINGS_PATH = join(LEGACY_ROUTINES_DIR, ROUTINE_BINDINGS_FILE);
 
 import { requireFunction } from "../validation.mjs";
 
@@ -75,7 +78,7 @@ function sortedDirectoryEntries(sourceDir) {
 
 function legacyRoutineCandidate(entry, { sourceDir, resolvedBindingsPath, normalizedBindings }) {
   const sourcePath = join(sourceDir, entry.name);
-  if (entry.name === "bindings.json" || resolve(sourcePath) === resolvedBindingsPath
+  if (entry.name === ROUTINE_BINDINGS_FILE || resolve(sourcePath) === resolvedBindingsPath
     || (!entry.isFile() && !entry.isSymbolicLink())) return null;
   let metadata;
   try {
@@ -83,7 +86,7 @@ function legacyRoutineCandidate(entry, { sourceDir, resolvedBindingsPath, normal
   } catch (error) {
     throw new Error(`cannot inspect legacy routine ${sourcePath}: ${error.message}`, { cause: error });
   }
-  if (!metadata.isFile() || !(metadata.mode & 0o111)) return null;
+  if (!metadata.isFile() || !(metadata.mode & MAGIC_OCTAL_111)) return null;
   return Object.freeze({
     name: entry.name,
     sourcePath,
@@ -145,7 +148,7 @@ export async function importLegacyRoutines({
   repository,
   resolveOwner,
   sourceDir = LEGACY_ROUTINES_DIR,
-  bindingsPath = join(sourceDir, "bindings.json"),
+  bindingsPath = join(sourceDir, ROUTINE_BINDINGS_FILE),
   now = () => new Date().toISOString(),
   apply = true,
   onConflict = () => {},

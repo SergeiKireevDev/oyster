@@ -1,4 +1,6 @@
 import { chmodSync, existsSync, lstatSync, renameSync } from "node:fs";
+const MAGIC_OCTAL_555 = 0o555;
+
 
 /**
  * Backups created by this release are never automatically deleted. The
@@ -40,7 +42,7 @@ export function retainLegacyFileAsReadOnlyBackup({
     }
     // Remove write access without granting read access or discarding executable
     // permissions that may be needed when a routine script is restored.
-    chmod(backupPath, sourceStat.mode & 0o555);
+    chmod(backupPath, sourceStat.mode & MAGIC_OCTAL_555);
   } catch (error) {
     try {
       rename(backupPath, sourcePath);

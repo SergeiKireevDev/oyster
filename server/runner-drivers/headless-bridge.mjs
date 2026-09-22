@@ -15,6 +15,11 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { createCodexOAuthCredentialSink } from "../codex-oauth-credential-sink.mjs";
+const MAGIC_1000 = 1000;
+const MAGIC_250 = 250;
+const MAGIC_NEG_16_384 = -16_384;
+const MAGIC_OCTAL_700 = 0o700;
+
 
 function fail(message) {
   process.stderr.write(`[oyster bridge] ${message}\n`);
@@ -92,7 +97,7 @@ function codexArgs(run) {
 function ensureGeminiSettings(hasOAuth) {
   if (geminiSettingsDir) return join(geminiSettingsDir, "settings.json");
   geminiSettingsDir = mkdtempSync(join(tmpdir(), "oyster-gemini-"));
-  chmodSync(geminiSettingsDir, 0o700);
+  chmodSync(geminiSettingsDir, MAGIC_OCTAL_700);
   const path = join(geminiSettingsDir, "settings.json");
   writeFileSync(path, JSON.stringify({
     ...(hasOAuth ? { security: { auth: { selectedType: "oauth-personal" } } } : {}),
@@ -195,7 +200,7 @@ function spawnChild(run) {
       output({ type: "oyster.bridge.session_model", model });
     }
   };
-  const modelTimer = config.kind === "codex" ? setInterval(reportModel, 250) : null;
+  const modelTimer = config.kind === "codex" ? setInterval(reportModel, MAGIC_250) : null;
   const childOutput = createInterface({ input: child.stdout });
   childOutput.on("line", (line) => {
     if (config.kind === "codex") {
@@ -214,7 +219,7 @@ function spawnChild(run) {
   });
   child.stderr.on("data", (chunk) => {
     const text = String(chunk);
-    childStderr = `${childStderr}${text}`.slice(-16_384);
+    childStderr = `${childStderr}${text}`.slice(MAGIC_NEG_16_384);
     process.stderr.write(`[${config.kind}] ${text}`);
   });
   let spawnError = null;
@@ -256,7 +261,7 @@ function runPrompt(message) {
     const previous = child;
     previous.stdin.end();
     previous.kill("SIGTERM");
-    const forceStop = setTimeout(() => previous.kill("SIGKILL"), 1000);
+    const forceStop = setTimeout(() => previous.kill("SIGKILL"), MAGIC_1000);
     forceStop.unref();
     previous.once("close", () => clearTimeout(forceStop));
     return;
@@ -300,7 +305,7 @@ function shutdown(signal) {
   if (child) child.kill(signal);
   else if (discovery) void discovery.catch(() => {}).finally(() => process.exit(0));
   else process.exit(0);
-  setTimeout(() => process.exit(0), 1000).unref();
+  setTimeout(() => process.exit(0), MAGIC_1000).unref();
 }
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));

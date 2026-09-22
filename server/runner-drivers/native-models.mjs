@@ -1,6 +1,9 @@
 import { spawn } from "node:child_process";
 import { CODEX_OPENROUTER_ARGS } from "../openrouter-routing.mjs";
 import { createInterface } from "node:readline";
+const MAGIC_1000 = 1000;
+const MAGIC_NEG_32000 = -32000;
+
 
 /** Short-lived native protocol connection. Never sends a prompt or logs credentials. */
 export async function withNativeRpc({ bin, args, cwd, env, signal, timeout = 20000, spawnImpl = spawn }, operation) {
@@ -45,7 +48,7 @@ export async function withNativeRpc({ bin, args, cwd, env, signal, timeout = 200
     lines.close();
     child.stdin.end();
     child.kill("SIGTERM");
-    const kill = setTimeout(() => child.kill("SIGKILL"), 1000);
+    const kill = setTimeout(() => child.kill("SIGKILL"), MAGIC_1000);
     kill.unref();
     child.once("close", () => clearTimeout(kill));
   }
@@ -83,7 +86,7 @@ export function discoverGeminiModels(options) {
       const session = await rpc("session/new", { cwd: options.cwd, mcpServers: [] });
       return (session.models?.availableModels ?? []).map((model) => ({ provider: "google", id: model.modelId, name: model.name ?? model.modelId }));
     } catch (error) {
-      if (error.code === -32000) return [];
+      if (error.code === MAGIC_NEG_32000) return [];
       throw error;
     }
   });

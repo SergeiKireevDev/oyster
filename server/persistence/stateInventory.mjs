@@ -6,10 +6,11 @@ const DURABILITY_CLASSIFICATIONS = Object.freeze([
 ]);
 const DURABILITY_CLASSIFICATION_SET = new Set(DURABILITY_CLASSIFICATIONS);
 const REPOSITORY_BACKED_CLASSIFICATIONS = new Set(["persistent", "rebuildable"]);
+const RELOAD_OWNER_CANDIDATE_OWNED = "candidate-owned";
 
 export const RELOAD_OWNERSHIP_CLASSIFICATIONS = Object.freeze([
   "stable",
-  "candidate-owned",
+  RELOAD_OWNER_CANDIDATE_OWNED,
   "shared-immutable",
   "restart-required",
 ]);
@@ -50,8 +51,8 @@ export const STABLE_STATE_INVENTORY = inventory({
   routineRuntimeDir: entry("ephemeral", "disposable artifact directory"),
   runners: entry("rebuildable", "durable descriptors plus live runner handles", "runners"),
   sseClients: entry("ephemeral", "live HTTP response connections"),
-  runnerWatchdogTimer: entry("ephemeral", "runner watchdog interval", null, "candidate-owned"),
-  runnerReaperTimer: entry("ephemeral", "runner reaper interval", null, "candidate-owned"),
+  runnerWatchdogTimer: entry("ephemeral", "runner watchdog interval", null, RELOAD_OWNER_CANDIDATE_OWNED),
+  runnerReaperTimer: entry("ephemeral", "runner reaper interval", null, RELOAD_OWNER_CANDIDATE_OWNED),
   reloadCount: entry("ephemeral", "process-local diagnostic counter"),
   broadcast: entry("ephemeral", "live SSE dispatch function"),
   serverEvent: entry("ephemeral", "live event serialization function"),
@@ -60,11 +61,11 @@ export const STABLE_STATE_INVENTORY = inventory({
   pinnedWidgetTranscodes: entry("ephemeral", "in-flight browser-video conversion promises"),
 
   hublotSupervisor: entry("ephemeral", "live supervisor and timer"),
-  piProcesses: entry("ephemeral", "process launcher service", null, "candidate-owned"),
-  sessionCatalog: entry("ephemeral", "coding-agent catalog connection", null, "candidate-owned"),
-  sessionCatalogKey: entry("ephemeral", "catalog configuration cache", null, "candidate-owned"),
-  sessionOperations: entry("ephemeral", "coding-agent operation service", null, "candidate-owned"),
-  sessionReferences: entry("ephemeral", "validated identity codec service", null, "candidate-owned"),
+  piProcesses: entry("ephemeral", "process launcher service", null, RELOAD_OWNER_CANDIDATE_OWNED),
+  sessionCatalog: entry("ephemeral", "coding-agent catalog connection", null, RELOAD_OWNER_CANDIDATE_OWNED),
+  sessionCatalogKey: entry("ephemeral", "catalog configuration cache", null, RELOAD_OWNER_CANDIDATE_OWNED),
+  sessionOperations: entry("ephemeral", "coding-agent operation service", null, RELOAD_OWNER_CANDIDATE_OWNED),
+  sessionReferences: entry("ephemeral", "validated identity codec service", null, RELOAD_OWNER_CANDIDATE_OWNED),
 
   eventBuffer: entry("ephemeral", "legacy migration-only field"),
   pi: entry("ephemeral", "legacy migration-only ChildProcess handle"),

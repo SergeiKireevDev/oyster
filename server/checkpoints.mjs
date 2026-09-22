@@ -1,3 +1,9 @@
+const MAGIC_25 = 25;
+const MAGIC_40_000 = 40_000;
+const MAGIC_60_000 = 60_000;
+const MAGIC_72 = 72;
+const MAGIC_NEG_16_384 = -16_384;
+
 /**
  * oyster — checkpoints, rollback forks and git plumbing
  *
@@ -115,7 +121,7 @@ export async function checkpointTree(session, options = {}) {
       ?? (inherited.length
         ? inherited.reduce((a, b) => ((a.timestamp ?? "") > (b.timestamp ?? "") ? a : b)).hash
         : null);
-    const descendants = depth > 25
+    const descendants = depth > MAGIC_25
       ? []
       : (childrenByParentId.get(info.id) ?? []).filter((child) => !lineage.has(child.id));
     const childLineage = new Set(lineage).add(info.id);
@@ -169,7 +175,7 @@ function summarizeDiff(piProcesses, dir, model, diff) {
       return;
     }
     let out = "", err = "", settled = false;
-    const appendBounded = (current, chunk) => (current + chunk).slice(-16_384);
+    const appendBounded = (current, chunk) => (current + chunk).slice(MAGIC_NEG_16_384);
     proc.stdout.on("data", (chunk) => { out = appendBounded(out, chunk); });
     proc.stderr.on("data", (chunk) => { err = appendBounded(err, chunk); });
     const finish = (value) => {
@@ -181,7 +187,7 @@ function summarizeDiff(piProcesses, dir, model, diff) {
     const timer = setTimeout(() => {
       try { proc.kill("SIGKILL"); } catch {}
       finish(null);
-    }, 60_000);
+    }, MAGIC_60_000);
     timer.unref?.();
     proc.once("error", () => finish(null));
     proc.once("exit", (code) => {
@@ -192,7 +198,7 @@ function summarizeDiff(piProcesses, dir, model, diff) {
       }
       const line = out.split("\n").map((value) => value.trim()).find((value) => value && !value.startsWith("```")) ?? "";
       const clean = line.replace(/^["'`]+|["'`]+$/g, "").replace(/[\u0000-\u001f\u007f]+/g, " ")
-        .replace(/\s+/g, " ").trim().slice(0, 72);
+        .replace(/\s+/g, " ").trim().slice(0, MAGIC_72);
       finish(clean || null);
     });
   });
@@ -213,7 +219,7 @@ async function cleanCheckpointResponse(dir) {
 async function checkpointMessage(piProcesses, dir, label, model) {
   if (model) {
     const diffResult = await git(dir, ["diff", "--cached"]);
-    const diff = diffResult.code === 0 ? diffResult.stdout.slice(0, 40_000) : "";
+    const diff = diffResult.code === 0 ? diffResult.stdout.slice(0, MAGIC_40_000) : "";
     const summary = diff.trim() ? await summarizeDiff(piProcesses, dir, model, diff) : null;
     if (summary) return { message: `checkpoint: ${summary}`, summarized: true };
   }
