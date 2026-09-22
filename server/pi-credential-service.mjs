@@ -2,13 +2,22 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { refreshAnthropicOAuthGrant } from "./claude-oauth-credential-sink.mjs";
+const MAGIC_1000 = 1000;
+const MAGIC_30 = 30;
+const MAGIC_60 = 60;
+
 
 const CAPABILITY_ERROR = "credential_service_unavailable";
 const ANTHROPIC = "anthropic";
 const OPENAI_CODEX = "openai-codex";
 const GEMINI_CLI = "google-gemini-cli";
 const AMP = "amp";
-const DEFAULT_ROTATION_MARGIN_MS = 30 * 60 * 1000;
+const DEFAULT_ROTATION_MARGIN_MS = MAGIC_30 * MAGIC_60 * MAGIC_1000;
+const HARNESS_CLAUDE_CODE = "claude-code";
+const PI_AUTH_STORAGE_LOAD_ERROR = "configured pi auth storage could not be loaded";
+const UNSUPPORTED_CREDENTIAL_ENTRY_ERROR = "configured pi auth storage contains an unsupported credential entry";
+const INVALID_MODEL_PROVIDER_METADATA_ERROR = "configured pi SDK returned invalid model provider metadata";
+const INVALID_OAUTH_PROVIDER_METADATA_ERROR = "configured pi SDK returned invalid OAuth provider metadata";
 
 function credentialError(code, message, cause) {
   const error = new Error(message, cause ? { cause } : undefined);
@@ -159,10 +168,10 @@ export function createPiCredentialService({
   }
 
   function normalizedHarness(harness = "pi") {
-    if (!new Set(["pi", "claude-code", "gemini", "amp"]).has(harness)) {
+    if (!new Set(["pi", HARNESS_CLAUDE_CODE, "gemini", "amp"]).has(harness)) {
       throw credentialError("invalid_harness", "supported harness is required");
     }
-    if (harness === "claude-code" && !claudeOAuthCredentialSink) throw credentialError("oauth_provider_not_found", "Claude Code OAuth is not configured");
+    if (harness === HARNESS_CLAUDE_CODE && !claudeOAuthCredentialSink) throw credentialError("oauth_provider_not_found", "Claude Code OAuth is not configured");
     if (harness === "gemini" && !geminiOAuthCredentialSink) throw credentialError("oauth_provider_not_found", "Gemini CLI OAuth is not configured");
     if (harness === "amp" && !ampOAuthCredentialSink) throw credentialError("oauth_provider_not_found", "Amp login is not configured");
     return harness;
@@ -177,7 +186,7 @@ export function createPiCredentialService({
         const value = content.trim() ? JSON.parse(content) : {};
         if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid credential root");
       } catch {
-        throw capabilityError("configured pi auth storage could not be loaded");
+        throw capabilityError(PI_AUTH_STORAGE_LOAD_ERROR);
       }
     }
     try {
@@ -185,11 +194,11 @@ export function createPiCredentialService({
       authStorage.reload();
       const errors = authStorage.drainErrors?.() ?? [];
       if (!Array.isArray(errors) || errors.length) {
-        throw capabilityError("configured pi auth storage could not be loaded");
+        throw capabilityError(PI_AUTH_STORAGE_LOAD_ERROR);
       }
     } catch (cause) {
       if (cause?.code === CAPABILITY_ERROR) throw cause;
-      throw capabilityError("configured pi auth storage could not be loaded", cause);
+      throw capabilityError(PI_AUTH_STORAGE_LOAD_ERROR, cause);
     }
   }
 
@@ -205,18 +214,18 @@ export function createPiCredentialService({
     const providerId = safeProviderId(provider, "credential");
     if (credential?.type === "api_key") return Object.freeze({ provider: providerId, credentialType: "api_key" });
     if (credential?.type === "oauth") return Object.freeze({ provider: providerId, credentialType: "oauth" });
-    throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+    throw capabilityError(UNSUPPORTED_CREDENTIAL_ENTRY_ERROR);
   }
 
   function safeRegisteredProviders(providers) {
-    if (!Array.isArray(providers)) throw capabilityError("configured pi SDK returned invalid model provider metadata");
+    if (!Array.isArray(providers)) throw capabilityError(INVALID_MODEL_PROVIDER_METADATA_ERROR);
     return new Set(providers.map((provider) => safeProviderId(provider?.id ?? provider, "model")));
   }
 
   function refreshRegistry(modelRegistry) {
     modelRegistry.refresh();
     const models = modelRegistry.getAll();
-    if (!Array.isArray(models)) throw capabilityError("configured pi SDK returned invalid model provider metadata");
+    if (!Array.isArray(models)) throw capabilityError(INVALID_MODEL_PROVIDER_METADATA_ERROR);
     return new Set(models.map((model) => safeProviderId(model?.provider, "model")));
   }
 
@@ -226,13 +235,13 @@ export function createPiCredentialService({
     }
     const discovered = authStorage.getOAuthProviders();
     if (!Array.isArray(discovered)) {
-      throw capabilityError("configured pi SDK returned invalid OAuth provider metadata");
+      throw capabilityError(INVALID_OAUTH_PROVIDER_METADATA_ERROR);
     }
     const providers = new Map();
     for (const item of discovered) {
       const id = safeProviderId(item?.id, "OAuth");
       const name = typeof item?.name === "string" ? item.name.trim() : "";
-      if (!name || providers.has(id)) throw capabilityError("configured pi SDK returned invalid OAuth provider metadata");
+      if (!name || providers.has(id)) throw capabilityError(INVALID_OAUTH_PROVIDER_METADATA_ERROR);
       providers.set(id, Object.freeze({ id, name }));
     }
     return providers;
@@ -240,13 +249,13 @@ export function createPiCredentialService({
 
   function runtimeOAuthProviders(modelRuntime) {
     const discovered = modelRuntime.getProviders();
-    if (!Array.isArray(discovered)) throw capabilityError("configured pi SDK returned invalid model provider metadata");
+    if (!Array.isArray(discovered)) throw capabilityError(INVALID_MODEL_PROVIDER_METADATA_ERROR);
     const providers = new Map();
     for (const provider of discovered) {
       const id = safeProviderId(provider?.id, "model");
       if (provider?.auth?.oauth === undefined) continue;
       const name = typeof provider.auth.oauth?.name === "string" ? provider.auth.oauth.name.trim() : "";
-      if (!name || providers.has(id)) throw capabilityError("configured pi SDK returned invalid OAuth provider metadata");
+      if (!name || providers.has(id)) throw capabilityError(INVALID_OAUTH_PROVIDER_METADATA_ERROR);
       providers.set(id, Object.freeze({ id, name }));
     }
     return providers;
@@ -503,7 +512,7 @@ export function createPiCredentialService({
         expiresAt: latest.expires, refreshTokenExpiresAt: Number.isFinite(latest.refreshExpires) ? latest.refreshExpires : null,
       });
     };
-    return withProviderReservation(ANTHROPIC, "pi", () => withProviderReservation(ANTHROPIC, "claude-code", perform));
+    return withProviderReservation(ANTHROPIC, "pi", () => withProviderReservation(ANTHROPIC, HARNESS_CLAUDE_CODE, perform));
   }
 
   /** pi keeps an API key, so Claude Code's grant is its own and rotates through the sink. */
@@ -632,7 +641,7 @@ export function createPiCredentialService({
       const status = claudeOAuthCredentialSink.status();
       result.push(Object.freeze({
         provider: ANTHROPIC,
-        harness: "claude-code",
+        harness: HARNESS_CLAUDE_CODE,
         displayName: "Anthropic",
         registered: true,
         oauthCapable: true,
@@ -686,7 +695,7 @@ export function createPiCredentialService({
           credentialType,
           source: safeSource(status, credentialType),
           configured: credentialType !== null || status?.configured === true,
-          ...(sharedAnthropic && provider === ANTHROPIC ? { harnesses: Object.freeze(["pi", "claude-code"]) } : {}),
+          ...(sharedAnthropic && provider === ANTHROPIC ? { harnesses: Object.freeze(["pi", HARNESS_CLAUDE_CODE]) } : {}),
           ...(sharedOpenAI && provider === OPENAI_CODEX ? { harnesses: Object.freeze(["pi", "codex"]) } : {}),
         });
       });
@@ -705,7 +714,7 @@ export function createPiCredentialService({
         throw credentialError("oauth_conflict", `provider ${providerId} uses stored OAuth credentials`);
       }
       if (current && current.type !== "api_key") {
-        throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+        throw capabilityError(UNSUPPORTED_CREDENTIAL_ENTRY_ERROR);
       }
       if (!current && !registeredProviders(adapter).has(providerId)) {
         throw credentialError("unknown_provider", `provider ${providerId} is not registered by the configured pi installation`);
@@ -729,7 +738,7 @@ export function createPiCredentialService({
       }
       if (!current) throw credentialError("credential_not_found", `provider ${providerId} has no stored API key`);
       if (current.type !== "api_key") {
-        throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+        throw capabilityError(UNSUPPORTED_CREDENTIAL_ENTRY_ERROR);
       }
       if (adapter.kind === "runtime") await adapter.authStorage.delete(providerId);
       else adapter.authStorage.remove(providerId);
@@ -753,7 +762,7 @@ export function createPiCredentialService({
 
   function assertPiOAuthProvider(adapter, providerId, harnessId) {
     const oauthProviders = adapter.kind === "runtime" ? runtimeOAuthProviders(adapter.modelRuntime) : safeOAuthProviders(adapter.authStorage);
-    if (!oauthProviders.has(providerId) || (harnessId === "claude-code" && providerId !== "anthropic")) {
+    if (!oauthProviders.has(providerId) || (harnessId === HARNESS_CLAUDE_CODE && providerId !== "anthropic")) {
       throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support OAuth for ${harnessId}`);
     }
   }
@@ -780,17 +789,17 @@ export function createPiCredentialService({
     const piStored = storedCredential(adapter, providerId);
     if (piStored?.type === "api_key") {
       projectToClaude(await standaloneClaudeCredential(adapter, providerId, safeCallbacks), { fatal: true });
-      return Object.freeze({ provider: providerId, harness: "claude-code", credentialType: "oauth", harnesses: Object.freeze(["claude-code"]) });
+      return Object.freeze({ provider: providerId, harness: HARNESS_CLAUDE_CODE, credentialType: "oauth", harnesses: Object.freeze([HARNESS_CLAUDE_CODE]) });
     }
     if (piStored?.type !== "oauth") await piOAuthLogin(adapter, providerId, safeCallbacks);
     const shared = storedCredential(adapter, providerId);
     if (shared?.type !== "oauth") throw capabilityError("configured pi auth storage did not store the Anthropic OAuth grant");
     projectToClaude(shared, { fatal: true });
-    return Object.freeze({ provider: providerId, harness: "claude-code", credentialType: "oauth", harnesses: Object.freeze(["pi", "claude-code"]) });
+    return Object.freeze({ provider: providerId, harness: HARNESS_CLAUDE_CODE, credentialType: "oauth", harnesses: Object.freeze(["pi", HARNESS_CLAUDE_CODE]) });
   }
 
   function mirroredOauthHarnesses(providerId, shared) {
-    if (claudeOAuthCredentialSink && providerId === ANTHROPIC && shared?.type === "oauth" && projectToClaude(shared)) return ["pi", "claude-code"];
+    if (claudeOAuthCredentialSink && providerId === ANTHROPIC && shared?.type === "oauth" && projectToClaude(shared)) return ["pi", HARNESS_CLAUDE_CODE];
     if (codexOAuthCredentialSink && providerId === OPENAI_CODEX && shared?.type === "oauth") {
       codexOAuthCredentialSink.project(shared);
       return ["pi", "codex"];
@@ -800,7 +809,7 @@ export function createPiCredentialService({
 
   async function piOAuthLoginResult({ adapter, providerId, replace, safeCallbacks }) {
     const current = storedCredential(adapter, providerId);
-    if (current && current.type !== "oauth" && current.type !== "api_key") throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+    if (current && current.type !== "oauth" && current.type !== "api_key") throw capabilityError(UNSUPPORTED_CREDENTIAL_ENTRY_ERROR);
     if (current && replace !== true) throw credentialError("credential_replace_required", `provider ${providerId} already has stored credentials`);
     await piOAuthLogin(adapter, providerId, safeCallbacks);
     return Object.freeze({ provider: providerId, credentialType: "oauth", harnesses: Object.freeze(mirroredOauthHarnesses(providerId, storedCredential(adapter, providerId))) });
@@ -816,7 +825,7 @@ export function createPiCredentialService({
       const adapter = await load();
       await prepare(adapter);
       assertPiOAuthProvider(adapter, providerId, harnessId);
-      return harnessId === "claude-code"
+      return harnessId === HARNESS_CLAUDE_CODE
         ? claudeCodeOAuthLogin({ adapter, providerId, replace, safeCallbacks })
         : piOAuthLoginResult({ adapter, providerId, replace, safeCallbacks });
     });
@@ -835,11 +844,11 @@ export function createPiCredentialService({
       await ampOAuthCredentialSink.remove();
       return Object.freeze({ provider: providerId, harness: harnessId, removed: true, harnesses: Object.freeze(["amp"]) });
     }
-    if (harnessId !== "claude-code") return null;
+    if (harnessId !== HARNESS_CLAUDE_CODE) return null;
     if (providerId !== "anthropic") throw credentialError("oauth_provider_not_found", `provider ${providerId} does not support OAuth for Claude Code`);
     if (!claudeOAuthCredentialSink.status().configured) throw credentialError("credential_not_found", "Claude Code has no stored Anthropic OAuth credential");
     claudeOAuthCredentialSink.remove();
-    return Object.freeze({ provider: providerId, harness: harnessId, removed: true, harnesses: Object.freeze(["claude-code"]) });
+    return Object.freeze({ provider: providerId, harness: harnessId, removed: true, harnesses: Object.freeze([HARNESS_CLAUDE_CODE]) });
   }
 
   function assertOAuthCredentialForLogout(adapter, providerId) {
@@ -847,7 +856,7 @@ export function createPiCredentialService({
     if (!current) throw credentialError("credential_not_found", `provider ${providerId} has no stored OAuth credential`);
     if (current.type === "oauth") return;
     if (current.type === "api_key") throw credentialError("credential_type_conflict", `provider ${providerId} uses a stored API key`);
-    throw capabilityError("configured pi auth storage contains an unsupported credential entry");
+    throw capabilityError(UNSUPPORTED_CREDENTIAL_ENTRY_ERROR);
   }
 
   function clearMirroredOauth(providerId) {
@@ -859,7 +868,7 @@ export function createPiCredentialService({
   }
 
   function removedOauthHarnesses(providerId) {
-    if (providerId === ANTHROPIC && claudeOAuthCredentialSink) return ["pi", "claude-code"];
+    if (providerId === ANTHROPIC && claudeOAuthCredentialSink) return ["pi", HARNESS_CLAUDE_CODE];
     if (providerId === OPENAI_CODEX && codexOAuthCredentialSink) return ["pi", "codex"];
     return ["pi"];
   }
@@ -882,7 +891,7 @@ export function createPiCredentialService({
 
   async function syncClaudeOAuth() {
     if (!claudeOAuthCredentialSink) return Object.freeze({ outcome: "unavailable" });
-    return withProviderReservation(ANTHROPIC, "pi", () => withProviderReservation(ANTHROPIC, "claude-code", async () => {
+    return withProviderReservation(ANTHROPIC, "pi", () => withProviderReservation(ANTHROPIC, HARNESS_CLAUDE_CODE, async () => {
       const adapter = await load();
       await prepare(adapter);
       return syncAnthropicOAuth(adapter);

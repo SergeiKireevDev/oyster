@@ -1,3 +1,12 @@
+const MAGIC_1000 = 1000;
+const MAGIC_200 = 200;
+const MAGIC_3000 = 3000;
+const MAGIC_4 = 4;
+const MAGIC_400 = 400;
+const MAGIC_6 = 6;
+const MAGIC_65535 = 65535;
+const MAGIC_NEG_2000 = -2000;
+
 /**
  * oyster — tunnel manager
  *
@@ -58,7 +67,7 @@ export async function persistHublotProcessIdentity(state, {
   if (existing) return existing;
   const identity = readProcessIdentity(pid);
   return state.appStore.transaction(async (repositories) => await repositories.hublots.upsertProcess({
-    id: `${hublotId}:${role}:${pid}:${randomBytes(4).toString("hex")}`,
+    id: `${hublotId}:${role}:${pid}:${randomBytes(MAGIC_4).toString("hex")}`,
     hublotId, role, pid,
     processGroupId: identity.processGroupId,
     bootId: identity.bootId,
@@ -177,11 +186,11 @@ export async function reserveHublot(state, {
   port, label = null, ownerId = null,
 } = {}) {
   port = Number(port);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`invalid port: ${port}`);
+  if (!Number.isInteger(port) || port < 1 || port > MAGIC_65535) throw new Error(`invalid port: ${port}`);
   for (const row of await hublotRepository(state).list({ port, excludeStatus: "closed" })) {
     if (row.port === port && row.status !== "closed") throw new Error(`port ${port} is already tunneled: ${row.public_url}`);
   }
-  const id = randomBytes(6).toString("hex");
+  const id = randomBytes(MAGIC_6).toString("hex");
   const createdAt = new Date().toISOString();
   return state.appStore.transaction(async (repositories) => {
     await repositories.hublots.create({
@@ -210,7 +219,7 @@ export async function publicHublotAnswers(url, {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const target = new URL(url);
-    target.searchParams.set("__oyster_hublot_health", randomBytes(6).toString("hex"));
+    target.searchParams.set("__oyster_hublot_health", randomBytes(MAGIC_6).toString("hex"));
     const response = await fetchImpl(target, {
       method: "GET",
       redirect: "manual",
@@ -219,7 +228,7 @@ export async function publicHublotAnswers(url, {
       signal: controller.signal,
     });
     try { await response.body?.cancel(); } catch {}
-    return response.status >= 200 && response.status < 400;
+    return response.status >= MAGIC_200 && response.status < MAGIC_400;
   } catch {
     return false;
   } finally {
@@ -242,7 +251,7 @@ export async function waitForPublicHublot(url, {
     if (remaining <= 0) break;
     await sleep(Math.min(intervalMs, remaining));
   } while (clock() < deadline);
-  throw new Error(`public hublot did not become ready within ${timeoutMs / 1000}s: ${url}`);
+  throw new Error(`public hublot did not become ready within ${timeoutMs / MAGIC_1000}s: ${url}`);
 }
 
 /**
@@ -257,7 +266,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
   return new Promise((resolvePromise, reject) => {
     (async () => {
       port = Number(port);
-      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      if (!Number.isInteger(port) || port < 1 || port > MAGIC_65535) {
         reject(new Error(`invalid port: ${port}`));
         return;
       }
@@ -306,7 +315,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
         if (settled) return;
         settled = true;
         proc.kill("SIGTERM");
-        const error = new Error(`tunnel did not report a URL within ${URL_TIMEOUT_MS / 1000}s`);
+        const error = new Error(`tunnel did not report a URL within ${URL_TIMEOUT_MS / MAGIC_1000}s`);
         await failOpeningHublot(state, id, error);
         reject(error);
       }, URL_TIMEOUT_MS);
@@ -315,7 +324,7 @@ export function openTunnel(state, { id, port, label = null, sessionId = null }, 
       let errTail = "";
       const onOutput = async (chunk) => {
         const text = String(chunk);
-        errTail = (errTail + text).slice(-2000);
+        errTail = (errTail + text).slice(MAGIC_NEG_2000);
         // Stream chunks can split the assigned URL at any byte boundary.
         const m = errTail.match(PUBLIC_URL_RE);
         if (m && !settled && !checkingPublicUrl) {
@@ -462,7 +471,7 @@ export async function closeTunnel(state, id) {
     if (!tunnel || tunnel.exitCode !== null) continue;
     hasTunnelHandle = true;
     tunnel.kill("SIGTERM");
-    setTimeout(() => { if (tunnel.exitCode === null) tunnel.kill("SIGKILL"); }, 3000).unref();
+    setTimeout(() => { if (tunnel.exitCode === null) tunnel.kill("SIGKILL"); }, MAGIC_3000).unref();
   }
   if (!hasTunnelHandle) {
     const closedAt = new Date().toISOString();

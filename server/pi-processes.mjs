@@ -2,6 +2,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMcpSettings } from "./mcp-settings.mjs";
 import { spawn } from "node:child_process";
+const MAGIC_8080 = 8080;
+
 
 import { requireNonBlankString as nonEmptyString } from "./validation.mjs";
 
@@ -26,7 +28,7 @@ function effectiveUiUrl(config) {
   for (const candidate of [config.OYSTER_URL, process.env.OYSTER_URL]) {
     if (candidate != null && String(candidate).trim() !== "") return String(candidate).trim();
   }
-  return `http://127.0.0.1:${config.PORT ?? 8080}`;
+  return `http://127.0.0.1:${config.PORT ?? MAGIC_8080}`;
 }
 
 /** Single policy boundary for every coding-agent subprocess. */

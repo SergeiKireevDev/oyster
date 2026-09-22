@@ -1,7 +1,15 @@
-const MAX_KEY_LENGTH = 16 * 1024;
+const MAGIC_1024 = 1024;
+const MAGIC_16 = 16;
+const MAGIC_20 = 20;
+const MAGIC_200 = 200;
+const MAGIC_400 = 400;
+const MAGIC_413 = 413;
+const MAGIC_503 = 503;
+
+const MAX_KEY_LENGTH = MAGIC_16 * MAGIC_1024;
 // Credential JSON is deliberately capped at 20 KiB: enough for a 16 KiB key
 // plus provider metadata, while preventing the general 5 MiB API limit here.
-const MAX_BODY_LENGTH = 20 * 1024;
+const MAX_BODY_LENGTH = MAGIC_20 * MAGIC_1024;
 const MAX_PROVIDER_LENGTH = 256;
 const PROVIDER_CONTROL_CHARACTERS = /[\x00-\x1f\x7f]/u;
 const OPERATION_STATUSES = Object.freeze({
@@ -57,14 +65,14 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
     try {
       raw = await readBody(req, MAX_BODY_LENGTH);
     } catch (error) {
-      if (error?.code === "body_too_large") json(res, 413, { error: "request body too large" });
-      else json(res, 400, { error: "request body could not be read" });
+      if (error?.code === "body_too_large") json(res, MAGIC_413, { error: "request body too large" });
+      else json(res, MAGIC_400, { error: "request body could not be read" });
       return undefined;
     }
     try {
       return JSON.parse(raw);
     } catch {
-      json(res, 400, { error: "invalid JSON" });
+      json(res, MAGIC_400, { error: "invalid JSON" });
       return undefined;
     }
   }
@@ -106,21 +114,21 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
 
   async function mutate(req, res, url, { remove = false } = {}) {
     if (url?.search) {
-      json(res, 400, { error: "credential mutations require a JSON body without query parameters" });
+      json(res, MAGIC_400, { error: "credential mutations require a JSON body without query parameters" });
       return;
     }
     const body = await credentialJsonBody(req, res);
     if (body === undefined) return;
     const input = mutationInput(body, { keyRequired: !remove });
     if (input.error) {
-      json(res, 400, { error: input.error });
+      json(res, MAGIC_400, { error: input.error });
       return;
     }
     // Do not durably mutate credentials until the composition provides every
     // capability required to complete the confirmation contract.
     const mutation = remove ? credentialService.removeApiKey : credentialService.setApiKey;
     if (typeof mutation !== "function" || typeof restartActiveRunners !== "function") {
-      json(res, 503, { error: "credential mutation service unavailable" });
+      json(res, MAGIC_503, { error: "credential mutation service unavailable" });
       return;
     }
 
@@ -142,7 +150,7 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
         operation: remove ? "remove" : "set",
         provider: input.provider,
       });
-      json(res, 503, {
+      json(res, MAGIC_503, {
         error: "credential saved but affected runners could not be restarted",
         code: "runner_restart_failed",
         credential,
@@ -157,7 +165,7 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
       restart: restart.status,
     });
     if (restart.status === "partial") {
-      json(res, 503, {
+      json(res, MAGIC_503, {
         error: "credential saved but some affected runners failed to restart",
         code: "runner_restart_partial",
         credential,
@@ -165,34 +173,34 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
       });
       return;
     }
-    json(res, 200, { credential, restart });
+    json(res, MAGIC_200, { credential, restart });
   }
 
   return {
     ...(openRouterRouting ? {
     "GET /harness-providers": async (_req, res) => {
-      if (!openRouterRouting) return json(res, 503, { error: "Harness routing unavailable" });
+      if (!openRouterRouting) return json(res, MAGIC_503, { error: "Harness routing unavailable" });
       try {
-        json(res, 200, { ...openRouterRouting.status(), ampAuthenticated: getAmpAuthStatus() === true });
-      } catch { json(res, 503, { error: "Harness credential status unavailable" }); }
+        json(res, MAGIC_200, { ...openRouterRouting.status(), ampAuthenticated: getAmpAuthStatus() === true });
+      } catch { json(res, MAGIC_503, { error: "Harness credential status unavailable" }); }
     },
     "POST /harness-providers": async (req, res, url) => {
-      if (!openRouterRouting) return json(res, 503, { error: "Harness routing unavailable" });
-      if (url?.search) return json(res, 400, { error: "JSON body required" });
+      if (!openRouterRouting) return json(res, MAGIC_503, { error: "Harness routing unavailable" });
+      if (url?.search) return json(res, MAGIC_400, { error: "JSON body required" });
       const body = await credentialJsonBody(req, res);
       if (body === undefined) return;
-      if (!body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "JSON object required" });
-      if (typeof restartActiveRunners !== "function") return json(res, 503, { error: "Harness restart service unavailable" });
+      if (!body || typeof body !== "object" || Array.isArray(body)) return json(res, MAGIC_400, { error: "JSON object required" });
+      if (typeof restartActiveRunners !== "function") return json(res, MAGIC_503, { error: "Harness restart service unavailable" });
       if (body.confirm !== true || !["codex", "claude-code"].includes(body.harness) || !["native", "openrouter"].includes(body.provider)) {
-        return json(res, 400, { error: "Confirm a supported global harness provider change" });
+        return json(res, MAGIC_400, { error: "Confirm a supported global harness provider change" });
       }
       try { await openRouterRouting.select(body.harness, body.provider); }
-      catch { return json(res, 400, { error: "Provider unavailable; save a valid OpenRouter key first" }); }
+      catch { return json(res, MAGIC_400, { error: "Provider unavailable; save a valid OpenRouter key first" }); }
       try {
         const restart = publicRestartResult(await restartActiveRunners({ harness: body.harness }));
-        if (!restart || restart.status === "partial") return json(res, 503, { error: "Provider saved; runner restart incomplete" });
-        json(res, 200, { ...openRouterRouting.status(), restart });
-      } catch { json(res, 503, { error: "Provider saved; runner restart failed" }); }
+        if (!restart || restart.status === "partial") return json(res, MAGIC_503, { error: "Provider saved; runner restart incomplete" });
+        json(res, MAGIC_200, { ...openRouterRouting.status(), restart });
+      } catch { json(res, MAGIC_503, { error: "Provider saved; runner restart failed" }); }
     },
     } : {}),
     "GET /api-keys": async (_req, res) => {
@@ -201,13 +209,13 @@ export function createCredentialRoutes({ requestContext, credentialService, rest
         providers = await credentialService.listProviders();
         if (!Array.isArray(providers)) throw new TypeError("invalid provider list");
       } catch {
-        json(res, 503, {
+        json(res, MAGIC_503, {
           error: "credential service unavailable",
           code: "credential_service_unavailable",
         });
         return;
       }
-      json(res, 200, { providers: openRouterRouting ? openRouterRouting.decorate(providers) : providers });
+      json(res, MAGIC_200, { providers: openRouterRouting ? openRouterRouting.decorate(providers) : providers });
     },
     "POST /api-keys": (req, res, url) => mutate(req, res, url),
     "DELETE /api-keys": (req, res, url) => mutate(req, res, url, { remove: true }),

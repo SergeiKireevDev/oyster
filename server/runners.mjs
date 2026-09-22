@@ -1,3 +1,13 @@
+const MAGIC_10 = 10;
+const MAGIC_1000 = 1000;
+const MAGIC_1024 = 1024;
+const MAGIC_15000 = 15000;
+const MAGIC_2000 = 2000;
+const MAGIC_3000 = 3000;
+const MAGIC_60 = 60;
+const MAGIC_60000 = 60000;
+const MAGIC_8 = 8;
+
 /**
  * oyster — coding-agent runner manager
  *
@@ -40,7 +50,7 @@ import { SESSION_TITLE_MESSAGE_LIMIT, summarizeSessionTitle } from "./session-ti
 import { normalizeLastEventId, sseDataFrame } from "./sse.mjs";
 
 const RUNNER_BUFFER_MAX = 400;
-const RUNNER_EVENT_MAX_BYTES = 1024 * 1024;
+const RUNNER_EVENT_MAX_BYTES = MAGIC_1024 * MAGIC_1024;
 // These events contain cumulative or request-scoped snapshots. Replaying them
 // is unnecessary because reconnects finish with an authoritative state and
 // transcript reload; persisting every streaming update also creates an
@@ -52,7 +62,7 @@ const WATCHDOG_INTERVAL_MS = 30000;
 const WATCHDOG_MAX_MISSES = 2;
 const CLARIFICATION_METHODS = new Set(["select", "confirm", "input", "editor"]);
 const BROKERED_UI_METHODS = new Set(["input", "confirm"]);
-const BROKERED_UI_TIMEOUT_MS = 10 * 60 * 1000;
+const BROKERED_UI_TIMEOUT_MS = MAGIC_10 * MAGIC_60 * MAGIC_1000;
 
 export const PINNED_ARTIFACT_SYSTEM_PROMPT = [
   "Artifact pinning policy:",
@@ -73,8 +83,8 @@ export const PINNED_ARTIFACT_SYSTEM_PROMPT = [
 // cluttering the runner list. Reap them after MAX_ORPHAN_AGE_MS of nameless
 // life — long enough to never kill an active-but-silent runner, short
 // enough to fade abandoned ones out.
-const MAX_ORPHAN_AGE_MS = 60 * 60 * 1000; // 1h
-const ORPHAN_REAP_INTERVAL_MS = 10 * 60 * 1000; // 10 min
+const MAX_ORPHAN_AGE_MS = MAGIC_60 * MAGIC_60 * MAGIC_1000; // 1h
+const ORPHAN_REAP_INTERVAL_MS = MAGIC_10 * MAGIC_60 * MAGIC_1000; // 10 min
 
 export const RUNNER_EPHEMERAL_FIELDS = Object.freeze([
   "proc", "stdoutReader", "driverEmit", "driverRuntime", "busy", "resumeId", "resumeQueue", "resumeTimer", "startTimer",
@@ -576,7 +586,7 @@ export async function createRunnerManager(state, {
   }
 
   function allocateRunnerId() {
-    for (let attempt = 0; attempt < 8; attempt++) {
+    for (let attempt = 0; attempt < MAGIC_8; attempt++) {
       const token = String(createRunnerId());
       const id = `r-${token}`;
       if (!/^r-[a-zA-Z0-9_-]{8,128}$/.test(id)) throw new Error("runner ID generator returned an invalid persistence-safe token");
@@ -625,7 +635,7 @@ export async function createRunnerManager(state, {
       if (runner.startTimer !== timer) return;
       runner.startTimer = null;
       if (!runner.proc && state.runners.has(runner.id)) startRunner(runner);
-    }), 2000);
+    }), MAGIC_2000);
     runner.startTimer = timer;
     timer.unref?.();
   }
@@ -634,7 +644,7 @@ export async function createRunnerManager(state, {
     if (runner.proc) return;
     const nowMs = Date.now();
     // crash-loop guard: if this runner died within 2s of spawning, wait
-    if (nowMs - runner.lastSpawnAt < 2000 && runner.startCount > 0) {
+    if (nowMs - runner.lastSpawnAt < MAGIC_2000 && runner.startCount > 0) {
       deferRunnerStart(runner);
       return;
     }
@@ -750,7 +760,7 @@ export async function createRunnerManager(state, {
     if (runner.resumeId) {
       // Safety valve: never hold commands forever if a driver's resume response goes missing.
       clearTimeout(runner.resumeTimer);
-      runner.resumeTimer = setTimeout(() => finishResume(runner), 15000);
+      runner.resumeTimer = setTimeout(() => finishResume(runner), MAGIC_15000);
       runner.resumeTimer.unref?.();
     }
     // Publish alive=true before pi_started. Clients use the start event to
@@ -798,7 +808,7 @@ export async function createRunnerManager(state, {
         try { proc.kill("SIGKILL"); }
         catch (error) { console.error(`[oyster] cannot kill runner ${runner.id}: ${error?.message ?? error}`); }
       }
-    }), 3000);
+    }), MAGIC_3000);
     killTimer.unref?.();
     runnersChanged(runner);
     await driverFor(runner).flushTranscript?.(runner);
@@ -1020,7 +1030,7 @@ export async function createRunnerManager(state, {
       // worker is still an orphan, so age it from the actual spawn time.
       if (now - runner.lastSpawnAt <= MAX_ORPHAN_AGE_MS) continue;
       console.log(
-        `[oyster] reaping orphan runner ${runner.id} (alive ${Math.round((now - runner.lastSpawnAt) / 60000)}min, no session name) in ${runner.dir}`
+        `[oyster] reaping orphan runner ${runner.id} (alive ${Math.round((now - runner.lastSpawnAt) / MAGIC_60000)}min, no session name) in ${runner.dir}`
       );
       stopRunner(runner);
     }

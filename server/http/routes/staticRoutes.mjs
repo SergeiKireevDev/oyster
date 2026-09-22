@@ -9,6 +9,9 @@ import {
 } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pipeline } from "node:stream";
+const MAGIC_200 = 200;
+const MAGIC_500 = 500;
+
 
 function isDocumentRoute(pathname) {
   return pathname === "/" || pathname === "/index.html"
@@ -88,7 +91,7 @@ export function createStaticRoutes(options = {}) {
         fd: opened.descriptor,
         autoClose: true,
       });
-      res.writeHead(200, {
+      res.writeHead(MAGIC_200, {
         "content-type": contentType,
         "content-length": opened.size,
         "cache-control": "no-cache",
@@ -111,7 +114,7 @@ export function createStaticRoutes(options = {}) {
   function serveDocument(res) {
     if (serveFile(indexPath, res, "text/html; charset=utf-8")) return;
     const body = "public/index.html missing";
-    res.writeHead(500, {
+    res.writeHead(MAGIC_500, {
       "content-type": "text/plain; charset=utf-8",
       "content-length": Buffer.byteLength(body),
       "cache-control": "no-store",

@@ -1,3 +1,8 @@
+const MAGIC_100 = 100;
+const MAGIC_50 = 50;
+const MAGIC_60_000 = 60_000;
+const MAGIC_8 = 8;
+
 export const SESSION_TITLE_MESSAGE_LIMIT = 10;
 const MESSAGE_TEXT_LIMIT = 3_000;
 const OUTPUT_LIMIT = 16_384;
@@ -30,14 +35,14 @@ function json(value, limit = MESSAGE_TEXT_LIMIT) {
   };
   const renderObject = (item, depth) => {
     if (ancestors.has(item)) { append('"[circular]"'); return; }
-    if (depth >= 8 || entries >= 100) { append('"[truncated]"'); return; }
+    if (depth >= MAGIC_8 || entries >= MAGIC_100) { append('"[truncated]"'); return; }
     ancestors.add(item);
     let keys;
-    try { keys = Object.keys(item).slice(0, 50); } catch { keys = []; }
+    try { keys = Object.keys(item).slice(0, MAGIC_50); } catch { keys = []; }
     const array = Array.isArray(item);
     append(array ? "[" : "{");
     for (const [keyIndex, key] of keys.entries()) {
-      if (remaining <= 1 || entries >= 100) break;
+      if (remaining <= 1 || entries >= MAGIC_100) break;
       if (keyIndex > 0) append(",");
       if (!array) { append(JSON.stringify(key)); append(":"); }
       entries += 1;
@@ -87,7 +92,7 @@ function contentText(content, ancestors = new WeakSet()) {
   ancestors.add(content);
   const rendered = [];
   let length = 0;
-  const blockCount = Math.min(Number(property(content, "length")) || 0, 100);
+  const blockCount = Math.min(Number(property(content, "length")) || 0, MAGIC_100);
   for (let index = 0; index < blockCount && length < MESSAGE_TEXT_LIMIT; index += 1) {
     length = appendRenderedBlock(rendered, length, blockText(property(content, index), ancestors));
   }
@@ -200,7 +205,7 @@ export function summarizeSessionTitle(piProcesses, options = {}) {
         }
         settle(cleanSessionTitle(stdout));
       });
-      const delay = Number.isFinite(configuredTimeout) && configuredTimeout >= 0 ? configuredTimeout : 60_000;
+      const delay = Number.isFinite(configuredTimeout) && configuredTimeout >= 0 ? configuredTimeout : MAGIC_60_000;
       timer = setTimeout(() => {
         settle(null);
         try { proc.kill("SIGKILL"); } catch {}

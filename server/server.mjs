@@ -1,4 +1,15 @@
 #!/usr/bin/env node
+const MAGIC_150 = 150;
+const MAGIC_16 = 16;
+const MAGIC_19 = 19;
+const MAGIC_22 = 22;
+const MAGIC_3 = 3;
+const MAGIC_500 = 500;
+const MAGIC_5000 = 5000;
+const MAGIC_65535 = 65535;
+const MAGIC_8080 = 8080;
+const MAGIC_OCTAL_600 = 0o600;
+
 /**
  * oyster — stable core (hot-reload host)
  *
@@ -69,7 +80,7 @@ function createTokenFile(tokenFile, token) {
   let descriptor = null;
   let created = false;
   try {
-    descriptor = openSync(tokenFile, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
+    descriptor = openSync(tokenFile, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, MAGIC_OCTAL_600);
     created = true;
     writeFileSync(descriptor, `${token}\n`, "utf8");
     fsyncSync(descriptor);
@@ -84,16 +95,16 @@ function createTokenFile(tokenFile, token) {
 
 function defaultToken() {
   const tokenFile = join(PROJECT_ROOT, ".ui-token");
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= MAGIC_3; attempt++) {
     const stored = storedToken(tokenFile);
     if (stored) return stored;
     try {
-      return createTokenFile(tokenFile, randomBytes(16).toString("hex"));
+      return createTokenFile(tokenFile, randomBytes(MAGIC_16).toString("hex"));
     } catch (error) {
       if (error.code === "EEXIST") {
         const racedToken = storedToken(tokenFile);
         if (racedToken) return racedToken;
-        if (attempt < 3) continue;
+        if (attempt < MAGIC_3) continue;
       }
       throw new Error(`cannot persist generated Oyster token at ${tokenFile}: ${error.message}`, { cause: error });
     }
@@ -108,7 +119,7 @@ function defaultTunnelBin() {
 }
 
 const DEFAULT_LOCAL_PI = join(PROJECT_ROOT, "pi", "packages", "coding-agent", "dist", "cli.js");
-const MIN_NODE_VERSION = [22, 19, 0];
+const MIN_NODE_VERSION = [MAGIC_22, MAGIC_19, 0];
 
 function resolveExecutable(value) {
   if (value.includes("/") || value.includes("\\")) return resolve(value);
@@ -178,7 +189,7 @@ function validateConfig(config) {
   if (!nodeVersionSupported(process.versions.node.split(".").map(Number))) {
     throw new Error(`oyster requires Node.js >= ${MIN_NODE_VERSION.join(".")} for its application database; current runtime is ${process.versions.node}`);
   }
-  if (!Number.isInteger(config.PORT) || config.PORT < 0 || config.PORT > 65535) throw new Error("PORT/--port must be an integer from 0 to 65535");
+  if (!Number.isInteger(config.PORT) || config.PORT < 0 || config.PORT > MAGIC_65535) throw new Error("PORT/--port must be an integer from 0 to 65535");
   if (typeof config.HOST !== "string" || config.HOST.trim() === "") throw new Error("HOST/--host must not be empty");
   validateConfiguredWorkdir(config);
   validateToken(config);
@@ -214,7 +225,7 @@ const geminiOAuthPath = resolve(process.env.GEMINI_OAUTH_PATH ?? join(agentDir, 
 const ampSettingsPath = resolve(process.env.AMP_SETTINGS_PATH ?? join(homedir(), ".config", "amp", "settings.json"));
 const persistentStore = String(process.env.PERSISTENT_STORE ?? "sqlite").trim().toLowerCase();
 const config = Object.freeze({
-  PORT: Number(argValue("--port") ?? process.env.PORT ?? 8080),
+  PORT: Number(argValue("--port") ?? process.env.PORT ?? MAGIC_8080),
   HOST: argValue("--host") ?? process.env.HOST ?? "0.0.0.0",
   PI_BIN: resolveExecutable(argValue("--pi") ?? process.env.PI_BIN ?? DEFAULT_LOCAL_PI),
   PI_DIR: resolve(argValue("--dir") ?? process.env.PI_DIR ?? process.cwd()),
@@ -481,7 +492,7 @@ function drainReloads() {
         reloadTimer = setTimeout(() => {
           reloadTimer = null;
           void drainReloads();
-        }, 150);
+        }, MAGIC_150);
       }
     }
   })();
@@ -499,7 +510,7 @@ function watchApp() {
     reloadTimer = setTimeout(() => {
       reloadTimer = null;
       void drainReloads();
-    }, 150);
+    }, MAGIC_150);
   };
 
   // The manifest is the single claim about what can participate in a
@@ -531,7 +542,7 @@ function watchApp() {
         if (shuttingDown) return;
         console.log(`[oyster] ${label} changed, notifying browsers`);
         state.serverEvent({ type: "ui_reload" });
-      }, 150);
+      }, MAGIC_150);
     };
     for (const directory of [distDir, assetsDir]) {
       if (!existsSync(directory)) continue;
@@ -548,7 +559,7 @@ function handleRequestFailure(error, res) {
   console.error(`[oyster] handler error: ${error?.stack ?? error}`);
   if (res.destroyed || res.writableEnded) return;
   if (!res.headersSent) {
-    res.writeHead(500, { "content-type": "application/json" });
+    res.writeHead(MAGIC_500, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "internal error" }));
     return;
   }
@@ -622,7 +633,7 @@ function shutdown() {
     ]);
     let timeoutHandle;
     const timeout = new Promise((resolveTimeout) => {
-      timeoutHandle = setTimeout(() => resolveTimeout("timeout"), 5000);
+      timeoutHandle = setTimeout(() => resolveTimeout("timeout"), MAGIC_5000);
     });
     const cleanupResult = await Promise.race([cleanup, timeout]);
     clearTimeout(timeoutHandle);

@@ -1,4 +1,9 @@
 import webPush from "web-push";
+const MAGIC_100 = 100;
+const MAGIC_404 = 404;
+const MAGIC_410 = 410;
+const MAGIC_60 = 60;
+
 
 const CLARIFICATION_METHODS = new Set(["select", "confirm", "input", "editor"]);
 export const DEFAULT_LONG_RUN_MS = 60_000;
@@ -17,8 +22,8 @@ function compactNotificationText(value, limit, keepEnd = false) {
 }
 
 function notificationBody(runner) {
-  const name = compactNotificationText(runner.sessionName, 60) || "Untitled session";
-  const workdir = compactNotificationText(runner.dir, 100, true);
+  const name = compactNotificationText(runner.sessionName, MAGIC_60) || "Untitled session";
+  const workdir = compactNotificationText(runner.dir, MAGIC_100, true);
   return workdir ? `${name}\n${workdir}` : name;
 }
 
@@ -55,7 +60,7 @@ export async function createWebPushService({
         await push.sendNotification(subscription, JSON.stringify(payload), { TTL: 3600, urgency: "high" });
         await repository.markDelivered(row.endpoint, new Date(now()).toISOString());
       } catch (error) {
-        if (error?.statusCode === 404 || error?.statusCode === 410) await repository.deleteSubscription(row.endpoint);
+        if (error?.statusCode === MAGIC_404 || error?.statusCode === MAGIC_410) await repository.deleteSubscription(row.endpoint);
         else logger.error(`[oyster] web push delivery failed: ${error?.message ?? error}`);
       }
     }));

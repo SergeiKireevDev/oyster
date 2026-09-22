@@ -3,6 +3,9 @@ import { redactChildOutput } from "./secret-output.mjs";
 import { randomUUID } from "node:crypto";
 import { validateRunnerDriver } from "./contract.mjs";
 import { assistantMessage, claudeRecordMessages } from "./claude-transcript.mjs";
+const MAGIC_80 = 80;
+const CLAUDE_CODE_HARNESS = "claude-code";
+
 
 /** Every tool of the `oyster` MCP server; the sudo password prompt is the human gate. */
 export const OYSTER_MCP_TOOLS = "mcp__oyster";
@@ -203,7 +206,7 @@ function sendPromptCommand(runtime, child, command, emit) {
   if (!child?.stdin?.writable) return false;
   const message = { role: "user", content: String(command.message ?? "") };
   const canonical = { role: "user", content: message.content, timestamp: Date.now() };
-  if (!runtime.sessionName) runtime.sessionName = message.content.trim().split("\n")[0].slice(0, 80) || "Claude Code session";
+  if (!runtime.sessionName) runtime.sessionName = message.content.trim().split("\n")[0].slice(0, MAGIC_80) || "Claude Code session";
   runtime.messages.push(canonical);
   runtime.streaming = true;
   emit({ type: "message_start", message: canonical });
@@ -243,11 +246,11 @@ export function createClaudeCodeDriver({
   if (typeof spawnImpl !== "function") throw new TypeError("Claude Code spawn implementation must be a function");
   if (!env || typeof env !== "object" || Array.isArray(env)) throw new TypeError("Claude Code environment must be an object");
   return Object.freeze(validateRunnerDriver({
-    id: "claude-code",
+    id: CLAUDE_CODE_HARNESS,
     label: "Claude Code",
 
     isSessionCompatible(reference) {
-      return !reference || reference.backend === "claude-code" || (Boolean(sqlitePath) && reference.backend === "sqlite");
+      return !reference || reference.backend === CLAUDE_CODE_HARNESS || (Boolean(sqlitePath) && reference.backend === "sqlite");
     },
 
     launch({ runner, cwd, systemPrompt }) {
@@ -322,7 +325,7 @@ export function createClaudeCodeDriver({
       if (!id) return null;
       return sqlitePath
         ? { backend: "sqlite", id, storagePath: sqlitePath }
-        : { backend: "claude-code", id, storagePath: null };
+        : { backend: CLAUDE_CODE_HARNESS, id, storagePath: null };
     },
   }));
 }

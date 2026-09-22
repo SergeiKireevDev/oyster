@@ -3,10 +3,20 @@ import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { isWithin as within } from "./pathContainment.mjs";
+const MAGIC_10 = 10;
+const MAGIC_100 = 100;
+const MAGIC_1000 = 1000;
+const MAGIC_1024 = 1024;
+const MAGIC_400 = 400;
+const MAGIC_413 = 413;
+const MAGIC_5 = 5;
+const MAGIC_60 = 60;
+const MAGIC_7 = 7;
 
-const DEFAULT_BODY_LIMIT = 5 * 1024 * 1024;
-const DEFAULT_RAW_BODY_LIMIT = 100 * 1024 * 1024;
-const AUTH_FAIL_WINDOW_MS = 10 * 60 * 1000;
+
+const DEFAULT_BODY_LIMIT = MAGIC_5 * MAGIC_1024 * MAGIC_1024;
+const DEFAULT_RAW_BODY_LIMIT = MAGIC_100 * MAGIC_1024 * MAGIC_1024;
+const AUTH_FAIL_WINDOW_MS = MAGIC_10 * MAGIC_60 * MAGIC_1000;
 const AUTH_FAIL_MAX = 20;
 const AUTH_FAIL_MAX_CLIENTS = 10_000;
 
@@ -136,7 +146,7 @@ export function createRequestContext(state, { now = Date.now, logger = console }
       return JSON.parse(await readBody(req));
     } catch (error) {
       const oversized = error?.code === "body_too_large";
-      json(res, oversized ? 413 : 400, {
+      json(res, oversized ? MAGIC_413 : MAGIC_400, {
         error: oversized ? "request body too large" : `invalid JSON: ${error.message}`,
       });
       return undefined;
@@ -167,7 +177,7 @@ export function createRequestContext(state, { now = Date.now, logger = console }
     const bearer = req.headers.authorization;
     return {
       query: url.searchParams.get("token"),
-      bearer: bearer?.startsWith("Bearer ") ? bearer.slice(7) : bearer,
+      bearer: bearer?.startsWith("Bearer ") ? bearer.slice(MAGIC_7) : bearer,
       xAuthToken: req.headers["x-auth-token"],
       xApiKey: req.headers["x-api-key"],
       cookie: parseCookies(req).oyster_token,

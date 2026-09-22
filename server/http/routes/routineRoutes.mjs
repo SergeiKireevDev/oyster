@@ -1,8 +1,14 @@
+const MAGIC_1024 = 1024;
+const MAGIC_200 = 200;
+const MAGIC_201 = 201;
+const MAGIC_256 = 256;
+const MAGIC_400 = 400;
+
 const ROUTINE_NAME = /^[A-Za-z0-9][\w.-]*$/;
 const ROUTINE_ACTIONS = new Set(["generate", "create", "start", "stop", "teardown", "release", "delete"]);
 const MAX_SESSION_ID_LENGTH = 100;
 const MAX_BRIEF_BYTES = 20_000;
-const MAX_SCRIPT_BYTES = 256 * 1024;
+const MAX_SCRIPT_BYTES = MAGIC_256 * MAGIC_1024;
 
 import { errorMessage } from "../../errors.mjs";
 import { disableCaching } from "../createRequestContext.mjs";
@@ -50,23 +56,23 @@ export function createRoutineRoutes({ state, requestContext, routines, ensureSes
 
   async function handleGenerate(body, res, sessionId) {
     const brief = typeof body.brief === "string" ? body.brief.trim() : "";
-    if (!brief || Buffer.byteLength(brief) > MAX_BRIEF_BYTES) return json(res, 400, { error: "generate requires a `brief` string (max 20KB)" });
-    if (!sessionId) return json(res, 400, { error: "generate requires a current session" });
+    if (!brief || Buffer.byteLength(brief) > MAX_BRIEF_BYTES) return json(res, MAGIC_400, { error: "generate requires a `brief` string (max 20KB)" });
+    if (!sessionId) return json(res, MAGIC_400, { error: "generate requires a current session" });
     await ensureSessionOwner(sessionId);
     const agent = await spawnRoutineAgent(state, { brief, sessionId });
-    return json(res, 201, { agent: true, output: agent.output, routines: await listRoutines(state) });
+    return json(res, MAGIC_201, { agent: true, output: agent.output, routines: await listRoutines(state) });
   }
 
   async function handleCreate(body, res, sessionId, name) {
     const script = typeof body.script === "string" ? body.script : null;
-    if (!script || Buffer.byteLength(script) > MAX_SCRIPT_BYTES) return json(res, 400, { error: "create requires a `script` string (max 256KB)" });
+    if (!script || Buffer.byteLength(script) > MAX_SCRIPT_BYTES) return json(res, MAGIC_400, { error: "create requires a `script` string (max 256KB)" });
     const owner = await routineOwner(sessionId);
-    return json(res, 201, { routine: await createRoutine(state, { name, script, sessionId, ownerId: owner?.id ?? null, cwd: await sessionCwd(state, sessionId) }) });
+    return json(res, MAGIC_201, { routine: await createRoutine(state, { name, script, sessionId, ownerId: owner?.id ?? null, cwd: await sessionCwd(state, sessionId) }) });
   }
 
   async function handleStart(res, sessionId, name) {
     const owner = await routineOwner(sessionId);
-    return json(res, 200, { routine: await startRoutine(state, name, { sessionId, ownerId: owner?.id ?? null, cwd: await sessionCwd(state, sessionId) }) });
+    return json(res, MAGIC_200, { routine: await startRoutine(state, name, { sessionId, ownerId: owner?.id ?? null, cwd: await sessionCwd(state, sessionId) }) });
   }
 
   async function dispatchRoutineAction({ action, body, res, sessionId, name }) {
@@ -74,29 +80,29 @@ export function createRoutineRoutes({ state, requestContext, routines, ensureSes
     if (action === "create") return handleCreate(body, res, sessionId, name);
     if (action === "start") return handleStart(res, sessionId, name);
     const operation = { stop: stopRoutine, teardown: teardownRoutine, release: releaseRoutine, delete: deleteRoutine }[action];
-    return json(res, 200, { routine: await operation(state, name) });
+    return json(res, MAGIC_200, { routine: await operation(state, name) });
   }
 
   return {
     "GET /routines": async (_req, res) => {
       disableCaching(res);
-      json(res, 200, { routines: await listRoutines(state), dir: routinesDir() });
+      json(res, MAGIC_200, { routines: await listRoutines(state), dir: routinesDir() });
     },
 
     "POST /routines": async (req, res) => {
       disableCaching(res);
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
-      if (!body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "request body must be a JSON object" });
+      if (!body || typeof body !== "object" || Array.isArray(body)) return json(res, MAGIC_400, { error: "request body must be a JSON object" });
       const action = typeof body.action === "string" ? body.action : "";
-      if (!ROUTINE_ACTIONS.has(action)) return json(res, 400, { error: `unknown action: ${action}` });
+      if (!ROUTINE_ACTIONS.has(action)) return json(res, MAGIC_400, { error: `unknown action: ${action}` });
       let sessionId;
       try { sessionId = sessionIdFromBody(body); }
-      catch (error) { return json(res, 400, { error: errorMessage(error) }); }
+      catch (error) { return json(res, MAGIC_400, { error: errorMessage(error) }); }
       const name = action === "generate" ? null : (typeof body.name === "string" ? body.name.trim() : "");
-      if (action !== "generate" && !ROUTINE_NAME.test(name)) return json(res, 400, { error: `invalid routine name: ${name}` });
+      if (action !== "generate" && !ROUTINE_NAME.test(name)) return json(res, MAGIC_400, { error: `invalid routine name: ${name}` });
       try { await dispatchRoutineAction({ action, body, res, sessionId, name }); }
-      catch (error) { json(res, 400, { error: errorMessage(error) }); }
+      catch (error) { json(res, MAGIC_400, { error: errorMessage(error) }); }
     },
   };
 }

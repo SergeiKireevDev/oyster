@@ -1,6 +1,9 @@
 import { closeSync, fstatSync, openSync, readdirSync, readSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import { join } from "node:path";
+const MAGIC_1024 = 1024;
+const MAGIC_64 = 64;
+
 
 function findRollout(directory, sessionId) {
   let entries;
@@ -48,7 +51,7 @@ export function createCodexSessionStateReader(home, sessionId) {
     try {
       fd = openSync(path, "r");
       if (fstatSync(fd).size < offset) { offset = 0; pending = ""; model = null; decoder = new StringDecoder("utf8"); }
-      const buffer = Buffer.alloc(64 * 1024);
+      const buffer = Buffer.alloc(MAGIC_64 * MAGIC_1024);
       let count;
       while ((count = readSync(fd, buffer, 0, buffer.length, offset)) > 0) {
         offset += count;

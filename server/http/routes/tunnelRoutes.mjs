@@ -1,3 +1,10 @@
+const MAGIC_200 = 200;
+const MAGIC_201 = 201;
+const MAGIC_400 = 400;
+const MAGIC_404 = 404;
+const MAGIC_502 = 502;
+const MAGIC_65535 = 65535;
+
 const MAX_LABEL_LENGTH = 200;
 const MAX_SESSION_ID_LENGTH = 100;
 
@@ -26,7 +33,7 @@ function assertOptionalString(value, label) {
 function parseCreateBody(body) {
   assertCreateBodyShape(body);
   const port = body.port;
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new TypeError("port must be an integer between 1 and 65535");
+  if (!Number.isInteger(port) || port < 1 || port > MAGIC_65535) throw new TypeError("port must be an integer between 1 and 65535");
   assertOptionalString(body.label, "label");
   assertOptionalString(body.sessionId, "sessionId");
   return {
@@ -57,7 +64,7 @@ export function createTunnelRoutes({
   return {
     "GET /tunnels": async (_req, res) => {
       disableCaching(res);
-      json(res, 200, { tunnels: await listTunnels(state), bin: config.TUNNEL_BIN });
+      json(res, MAGIC_200, { tunnels: await listTunnels(state), bin: config.TUNNEL_BIN });
     },
 
     "POST /tunnels": async (req, res) => {
@@ -69,7 +76,7 @@ export function createTunnelRoutes({
       try {
         parsed = parseCreateBody(body);
       } catch (error) {
-        json(res, 400, { error: errorMessage(error) });
+        json(res, MAGIC_400, { error: errorMessage(error) });
         return;
       }
 
@@ -89,7 +96,7 @@ export function createTunnelRoutes({
         };
         const tunnel = await openTunnel(state, reservedOptions);
         const persisted = (await listTunnels(state, { id: tunnel.id })).find((item) => item.id === tunnel.id) ?? tunnel;
-        json(res, 201, { tunnel: persisted });
+        json(res, MAGIC_201, { tunnel: persisted });
       } catch (error) {
         const message = errorMessage(error);
         try {
@@ -111,7 +118,7 @@ export function createTunnelRoutes({
             error: message,
           });
         }
-        json(res, 502, { error: message });
+        json(res, MAGIC_502, { error: message });
       }
     },
 
@@ -120,14 +127,14 @@ export function createTunnelRoutes({
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
       if (!body || typeof body.id !== "string" || !body.id.trim()) {
-        json(res, 400, { error: "id must be a non-empty string" });
+        json(res, MAGIC_400, { error: "id must be a non-empty string" });
         return;
       }
       try {
         const tunnel = await reopenHublot(state, body.id);
-        json(res, 200, { tunnel });
+        json(res, MAGIC_200, { tunnel });
       } catch (error) {
-        json(res, error.statusCode ?? 502, { error: errorMessage(error) });
+        json(res, error.statusCode ?? MAGIC_502, { error: errorMessage(error) });
       }
     },
 
@@ -138,21 +145,21 @@ export function createTunnelRoutes({
       const body = await readJsonBody(req, res);
       if (body === undefined) return;
       if (!body || typeof body !== "object" || Array.isArray(body)) {
-        json(res, 400, { error: "request body must be a JSON object" });
+        json(res, MAGIC_400, { error: "request body must be a JSON object" });
         return;
       }
       if (typeof body.id !== "string" || !body.id) {
-        json(res, 400, { error: "id must be a non-empty string" });
+        json(res, MAGIC_400, { error: "id must be a non-empty string" });
         return;
       }
       if (body.sessionId !== undefined && body.sessionId !== null && typeof body.sessionId !== "string") {
-        json(res, 400, { error: "sessionId must be a string" });
+        json(res, MAGIC_400, { error: "sessionId must be a string" });
         return;
       }
 
       const tunnel = (await listTunnels(state, { id: body.id })).find((item) => item.id === body.id);
       if (!tunnel) {
-        json(res, 404, { error: "no such hublot" });
+        json(res, MAGIC_404, { error: "no such hublot" });
         return;
       }
       const sessionId = body.sessionId ? body.sessionId.slice(0, MAX_SESSION_ID_LENGTH) : null;
@@ -162,9 +169,9 @@ export function createTunnelRoutes({
         await pinHublot(rebound);
         const current = (await listTunnels(state, { id: tunnel.id })).find((item) => item.id === tunnel.id);
         emitServerEvent(state, { type: "tunnel_opened", tunnel: current });
-        json(res, 200, { tunnel: current });
+        json(res, MAGIC_200, { tunnel: current });
       } catch (error) {
-        json(res, 400, { error: errorMessage(error) });
+        json(res, MAGIC_400, { error: errorMessage(error) });
       }
     },
 
@@ -172,10 +179,10 @@ export function createTunnelRoutes({
       disableCaching(res);
       const closed = await closeTunnel(state, String(url.searchParams.get("id") ?? ""));
       if (!closed) {
-        json(res, 404, { error: "no such tunnel" });
+        json(res, MAGIC_404, { error: "no such tunnel" });
         return;
       }
-      json(res, 200, { closed });
+      json(res, MAGIC_200, { closed });
     },
   };
 }

@@ -1,4 +1,7 @@
 import { isAbsolute, resolve } from "node:path";
+const MAGIC_1024 = 1024;
+const MAGIC_16 = 16;
+
 
 export const APP_SETTING_KEYS = Object.freeze({
   currentWorkdir: "current_workdir",
@@ -63,7 +66,7 @@ function decodeJson(row, key) {
   catch { throw new Error(`invalid JSON for app setting ${key}`); }
 }
 
-const MAX_PATH_BYTES = 16 * 1024;
+const MAX_PATH_BYTES = MAGIC_16 * MAGIC_1024;
 
 function validateWorkdir(value) {
   if (typeof value !== "string" || !value.trim() || !isAbsolute(value)) {

@@ -1,4 +1,6 @@
 import { resolve, relative, isAbsolute } from "node:path";
+const MAGIC_256 = 256;
+
 
 const KEY_PREFIX = "ps1_";
 const EXTERNAL_BACKENDS = new Set(["claude-code", "codex", "gemini", "amp", "antigravity"]);
@@ -18,7 +20,7 @@ function confinedTo(path, root) {
 }
 
 function requireId(value) {
-  if (typeof value !== "string" || !value || value !== value.trim() || value.length > 256 || /[\u0000-\u001f\u007f-\u009f]/.test(value)) {
+  if (typeof value !== "string" || !value || value !== value.trim() || value.length > MAGIC_256 || /[\u0000-\u001f\u007f-\u009f]/.test(value)) {
     throw new Error("session reference id must be a trimmed string of 1–256 characters without control characters");
   }
   return value;

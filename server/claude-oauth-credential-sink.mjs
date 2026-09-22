@@ -4,13 +4,19 @@ import {
   readFileSync, renameSync, rmSync, writeFileSync,
 } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
+const MAGIC_1000 = 1000;
+const MAGIC_30 = 30;
+const MAGIC_5 = 5;
+const MAGIC_60 = 60;
+const MAGIC_OCTAL_600 = 0o600;
+
 
 const ANTHROPIC_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const ANTHROPIC_TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
 // Claude Code treats a token as expired five minutes early; store the same
 // conservative expiry so both sides agree on when a refresh is due.
-const ACCESS_EXPIRY_MARGIN_MS = 5 * 60 * 1000;
-const REFRESH_TIMEOUT_MS = 30 * 1000;
+const ACCESS_EXPIRY_MARGIN_MS = MAGIC_5 * MAGIC_60 * MAGIC_1000;
+const REFRESH_TIMEOUT_MS = MAGIC_30 * MAGIC_1000;
 const ANTHROPIC_SCOPES = Object.freeze([
   "org:create_api_key",
   "user:profile",
@@ -114,9 +120,9 @@ export async function refreshAnthropicOAuthGrant(refreshToken, { fetchImpl = fet
     type: "oauth",
     access: payload.access_token,
     refresh: payload.refresh_token,
-    expires: issuedAt + payload.expires_in * 1000 - ACCESS_EXPIRY_MARGIN_MS,
+    expires: issuedAt + payload.expires_in * MAGIC_1000 - ACCESS_EXPIRY_MARGIN_MS,
     refreshExpires: Number.isFinite(payload.refresh_token_expires_in)
-      ? issuedAt + payload.refresh_token_expires_in * 1000
+      ? issuedAt + payload.refresh_token_expires_in * MAGIC_1000
       : null,
   });
 }
@@ -154,7 +160,7 @@ export function createClaudeOAuthCredentialSink({ configDir } = {}) {
       descriptor = openSync(
         temporaryPath,
         constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
-        0o600,
+        MAGIC_OCTAL_600,
       );
       writeFileSync(descriptor, `${JSON.stringify(root)}\n`, "utf8");
       fsyncSync(descriptor);

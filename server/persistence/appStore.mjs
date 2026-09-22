@@ -4,6 +4,8 @@ import { dirname, resolve } from "node:path";
 import { openSqliteDatabase } from "./sqliteDatabase.mjs";
 import { applyMigrations } from "./migrations.mjs";
 import { assertGeneralAppSettingKey, assertGeneralAppSettingValue } from "./appSettings.mjs";
+const INSERT_APP_SESSION_SQL = "INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING";
+const FIND_APP_SESSION_OWNER_SQL = "SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?";
 
 /**
  * Open the single oyster application database owned by the stable server.
@@ -109,16 +111,16 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
       },
       record: (reference, checkpoint) => writeAtomically(async () => {
         const createdAt = checkpoint.timestamp ?? new Date().toISOString();
-        await database.run("INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING", reference.backend, reference.id, reference.storagePath, createdAt);
-        const owner = await database.get("SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?", reference.backend, reference.id, reference.storagePath);
+        await database.run(INSERT_APP_SESSION_SQL, reference.backend, reference.id, reference.storagePath, createdAt);
+        const owner = await database.get(FIND_APP_SESSION_OWNER_SQL, reference.backend, reference.id, reference.storagePath);
         await database.run("INSERT INTO checkpoints(owner_id, git_hash, anchor_id, payload, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(owner_id, git_hash, anchor_id) DO NOTHING", owner.id, checkpoint.hash, checkpoint.anchorId, JSON.stringify(checkpoint), createdAt);
         const row = await database.get("SELECT payload FROM checkpoints WHERE owner_id = ? AND git_hash = ? AND anchor_id = ?", owner.id, checkpoint.hash, checkpoint.anchorId);
         return JSON.parse(row.payload);
       }),
       replaceForSession: (reference, checkpoints) => writeAtomically(async () => {
         const createdAt = checkpoints[0]?.timestamp ?? new Date().toISOString();
-        await database.run("INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING", reference.backend, reference.id, reference.storagePath, createdAt);
-        const owner = await database.get("SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?", reference.backend, reference.id, reference.storagePath);
+        await database.run(INSERT_APP_SESSION_SQL, reference.backend, reference.id, reference.storagePath, createdAt);
+        const owner = await database.get(FIND_APP_SESSION_OWNER_SQL, reference.backend, reference.id, reference.storagePath);
         await database.run("DELETE FROM checkpoints WHERE owner_id = ?", owner.id);
         const insert = "INSERT INTO checkpoints(owner_id, git_hash, anchor_id, payload, created_at) VALUES (?, ?, ?, ?, ?)";
         for (const checkpoint of checkpoints) await database.run(insert, owner.id, checkpoint.hash, checkpoint.anchorId, JSON.stringify(checkpoint), checkpoint.timestamp ?? createdAt);
@@ -141,8 +143,8 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
       },
       save: (grouped) => writeAtomically(async () => {
         await database.exec("DELETE FROM checkpoints");
-        const findOwner = "SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?";
-        const insertOwner = "INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING";
+        const findOwner = FIND_APP_SESSION_OWNER_SQL;
+        const insertOwner = INSERT_APP_SESSION_SQL;
         const insertCheckpoint = "INSERT INTO checkpoints(owner_id, git_hash, anchor_id, payload, created_at) VALUES (?, ?, ?, ?, ?)";
         for (const [sessionId, checkpoints] of Object.entries(grouped ?? {})) {
           for (const checkpoint of checkpoints ?? []) {
@@ -163,11 +165,11 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
       // routines, or other owned records from the native conversation.
       reidentify: (previous, next) => writeAtomically(async () => {
         const owner = await database.get(
-          "SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?",
+          FIND_APP_SESSION_OWNER_SQL,
           previous.backend, previous.id, previous.storagePath);
         if (!owner) return;
         const target = await database.get(
-          "SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?",
+          FIND_APP_SESSION_OWNER_SQL,
           next.backend, next.id, next.storagePath);
         if (target && target.id !== owner.id) {
           for (const table of ["operations", "checkpoints", "routines", "hublots", "runners", "pinned_widget_groups", "pinned_widgets"]) {

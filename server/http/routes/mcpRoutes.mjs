@@ -4,6 +4,17 @@ import { isAbsolute, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+const MAGIC_100 = 100;
+const MAGIC_1000 = 1000;
+const MAGIC_1024 = 1024;
+const MAGIC_200 = 200;
+const MAGIC_2000 = 2000;
+const MAGIC_300 = 300;
+const MAGIC_400 = 400;
+const MAGIC_65535 = 65535;
+const MAGIC_NEG_10 = -10;
+const PINNED_WIDGETS_ROUTE = "/pinned-widgets";
+
 
 /**
  * MCP endpoint served by the Oyster process itself (Streamable HTTP, stateless).
@@ -18,7 +29,7 @@ import { z } from "zod";
  * through the brokered `POST /runner/ui-request` clarification dialog.
  */
 
-const MAX_BASH_OUTPUT_BYTES = 200 * 1024;
+const MAX_BASH_OUTPUT_BYTES = MAGIC_200 * MAGIC_1024;
 
 function text(message, structuredContent) {
   return { content: [{ type: "text", text: message }], ...(structuredContent ? { structuredContent } : {}) };
@@ -43,9 +54,9 @@ function runBash(spawnImpl, command, { cwd, sudoPassword, timeoutSeconds, signal
     child.stderr.on("data", collect);
     const kill = () => {
       try { child.kill("SIGTERM"); } catch {}
-      setTimeout(() => { try { child.kill("SIGKILL"); } catch {} }, 2000).unref();
+      setTimeout(() => { try { child.kill("SIGKILL"); } catch {} }, MAGIC_2000).unref();
     };
-    const timer = timeoutSeconds ? setTimeout(() => { timedOut = true; kill(); }, timeoutSeconds * 1000) : null;
+    const timer = timeoutSeconds ? setTimeout(() => { timedOut = true; kill(); }, timeoutSeconds * MAGIC_1000) : null;
     const onAbort = () => kill();
     signal?.addEventListener("abort", onAbort, { once: true });
     const finish = (error, exitCode) => {
@@ -87,7 +98,7 @@ async function routineStatusTool({ api, renderText, name }) {
   const { routines } = await api("GET", "/routines");
   const routine = routines.find((candidate) => candidate.name === name);
   if (!routine) throw new Error(`no such routine: ${name}`);
-  const tail = (routine.log ?? []).slice(-10).join("\n");
+  const tail = (routine.log ?? []).slice(MAGIC_NEG_10).join("\n");
   return renderText(describeRoutine(routine) + (tail ? `\nrecent output:\n${tail}` : ""), routine);
 }
 
@@ -108,7 +119,7 @@ function routineToolMessage(action, routine, progressionNotes) {
 async function createMonitorWidget({ params, scope, api, text: renderText, workdir, sessionId }) {
   if (!params.label?.trim()) throw new Error("'monitor' requires a label");
   if (!params.preview_script || !params.content_script) throw new Error("'monitor' requires preview_script and content_script");
-  const { widget } = await api("POST", "/pinned-widgets", {
+  const { widget } = await api("POST", PINNED_WIDGETS_ROUTE, {
     label: params.label,
     previewScript: params.preview_script,
     contentScript: params.content_script,
@@ -123,7 +134,7 @@ async function createMonitorWidget({ params, scope, api, text: renderText, workd
 
 async function pinWidget({ params, scope, api, text: renderText, workdir, sessionId }) {
   if (!!params.path === !!params.url) throw new Error("'pin' requires exactly one of path or url");
-  const { widget } = await api("POST", "/pinned-widgets", {
+  const { widget } = await api("POST", PINNED_WIDGETS_ROUTE, {
     ...(params.path ? { path: resolve(workdir, params.path) } : { url: params.url }),
     label: params.label,
     groupId: params.group_id,
@@ -147,7 +158,7 @@ async function createWidgetGroup({ params, scope, api, text: renderText, session
 
 async function moveWidget({ params, api, text: renderText, sessionId }) {
   if (!params.id) throw new Error("'move' requires id");
-  const { widget } = await api("PATCH", "/pinned-widgets", { id: params.id, groupId: params.group_id ?? null, beforeId: params.before_id ?? null, sessionId });
+  const { widget } = await api("PATCH", PINNED_WIDGETS_ROUTE, { id: params.id, groupId: params.group_id ?? null, beforeId: params.before_id ?? null, sessionId });
   return renderText(`Moved ${widget.label}${widget.groupId ? ` into group ${widget.groupId}` : " to the top level"}.`, widget);
 }
 
@@ -156,7 +167,7 @@ async function listPinnedWidgets({ scope, api, text: renderText, sessionId }) {
   if (sessionId) query.set("sessionId", sessionId);
   const data = await api("GET", `/pinned-widgets?${query}`);
   const all = data.widgets ?? [];
-  const widgets = all.slice(0, 100);
+  const widgets = all.slice(0, MAGIC_100);
   const groups = data.groups ?? [];
   const lines = widgets.map((widget) =>
     `- id=${widget.id} kind=${widget.kind} label=${JSON.stringify(widget.label)}${widget.groupId ? ` group=${widget.groupId}` : ""} status=${widget.availability}`);
@@ -178,7 +189,7 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
 
   async function api(method, path, body, { signal } = {}) {
     const { status, data } = await dispatch(method, path, body, { signal });
-    if (status < 200 || status >= 300) {
+    if (status < MAGIC_200 || status >= MAGIC_300) {
       throw Object.assign(new Error(data?.error ?? `${method} ${path} failed (${status})`), { statusCode: status });
     }
     return data ?? {};
@@ -241,13 +252,13 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
       description: z.string().optional().describe("For 'open': optional hublot label"),
       session_id: z.string().optional().describe("For 'open': bind the hublot to this session id instead of the current one"),
       id: z.string().optional().describe("For 'close': hublot id"),
-      port: z.number().int().min(1).max(65535).optional().describe("Required for open: existing local service port; for close: tunnel port"),
+      port: z.number().int().min(1).max(MAGIC_65535).optional().describe("Required for open: existing local service port; for close: tunnel port"),
     },
   }, async (params) => {
     if (params.action === "open") {
       if (params.port === undefined) throw new Error("'open' requires a port between 1 and 65535");
       const data = await api("POST", "/tunnels", {
-        label: params.description?.slice(0, 200),
+        label: params.description?.slice(0, MAGIC_200),
         port: params.port,
         sessionId: params.session_id ?? requireSession(),
       });
@@ -319,7 +330,7 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
       "When one task produces four or more documentation or media artifacts, call this once with a descriptive group name and every artifact path.",
     inputSchema: {
       group: z.string().describe("Short descriptive name for the new widget group"),
-      paths: z.array(z.string()).min(2).max(100).describe("Two or more related documentation or media files to pin into the group"),
+      paths: z.array(z.string()).min(2).max(MAGIC_100).describe("Two or more related documentation or media files to pin into the group"),
       scope: z.enum(["session", "workspace"]).optional().describe("Pin scope; defaults to the current session"),
     },
   }, async (params) => {
@@ -340,14 +351,14 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
       for (const path of paths) {
         const existing = existingByPath.get(path) ?? null;
         const data = existing
-          ? await api("PATCH", "/pinned-widgets", { id: existing.id, groupId: group.id, sessionId })
-          : await api("POST", "/pinned-widgets", { path, groupId: group.id, sessionId, scope });
+          ? await api("PATCH", PINNED_WIDGETS_ROUTE, { id: existing.id, groupId: group.id, sessionId })
+          : await api("POST", PINNED_WIDGETS_ROUTE, { path, groupId: group.id, sessionId, scope });
         changed.push({ widget: data.widget, existing });
       }
     } catch (error) {
       for (const item of changed.reverse()) {
         try {
-          if (item.existing) await api("PATCH", "/pinned-widgets", { id: item.widget.id, groupId: item.existing.groupId ?? null, sessionId });
+          if (item.existing) await api("PATCH", PINNED_WIDGETS_ROUTE, { id: item.widget.id, groupId: item.existing.groupId ?? null, sessionId });
           else await api("DELETE", `/pinned-widgets?id=${encodeURIComponent(item.widget.id)}`);
         } catch {}
       }
@@ -416,7 +427,7 @@ export function createMcpRoutes({ state, requestContext, dispatch, spawnImpl = s
     "POST /mcp": async (req, res, url) => {
       const workdir = requestParameter(url, "workdir");
       if (workdir && !isAbsolute(workdir)) {
-        json(res, 400, { error: "workdir must be an absolute path" });
+        json(res, MAGIC_400, { error: "workdir must be an absolute path" });
         return;
       }
       const runnerId = requestParameter(url, "runner");

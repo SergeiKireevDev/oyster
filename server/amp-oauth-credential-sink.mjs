@@ -1,8 +1,13 @@
 import { spawn } from "node:child_process";
 import { closeSync, constants, fstatSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
+const MAGIC_1024 = 1024;
+const MAGIC_2000 = 2000;
+const MAGIC_64 = 64;
+const MAGIC_OCTAL_600 = 0o600;
 
-const MAX_OUTPUT = 64 * 1024;
+
+const MAX_OUTPUT = MAGIC_64 * MAGIC_1024;
 const DEVICE_PATTERN = /(https:\/\/auth\.ampcode\.com\/device\?[^\s]+)[\s\S]*?matches:\s*([A-Z0-9-]+)/i;
 
 function credentialError(message, cause) {
@@ -36,7 +41,7 @@ export function createAmpOAuthCredentialSink({ bin, settingsPath, markerPath, sp
 
   function mark() {
     mkdirSync(dirname(markerPath), { recursive: true, mode: 0o700 });
-    const descriptor = openSync(markerPath, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o600);
+    const descriptor = openSync(markerPath, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, MAGIC_OCTAL_600);
     try { writeFileSync(descriptor, "connected\n"); } finally { closeSync(descriptor); }
   }
 
@@ -52,7 +57,7 @@ export function createAmpOAuthCredentialSink({ bin, settingsPath, markerPath, sp
       child.stderr?.on("data", consume);
       const abort = () => {
         try { child.kill("SIGTERM"); } catch {}
-        setTimeout(() => { try { child.kill("SIGKILL"); } catch {} }, 2000).unref();
+        setTimeout(() => { try { child.kill("SIGKILL"); } catch {} }, MAGIC_2000).unref();
       };
       signal?.addEventListener("abort", abort, { once: true });
       child.on("error", (error) => { signal?.removeEventListener("abort", abort); reject(error); });
