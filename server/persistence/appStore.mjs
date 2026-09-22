@@ -7,6 +7,10 @@ import { assertGeneralAppSettingKey, assertGeneralAppSettingValue } from "./appS
 const INSERT_APP_SESSION_SQL = "INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING";
 const FIND_APP_SESSION_OWNER_SQL = "SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?";
 
+function updateAssignments(entries) {
+  return entries.map(([column]) => `${column} = ?`).join(", ");
+}
+
 /**
  * Open the single oyster application database owned by the stable server.
  *
@@ -317,7 +321,7 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
         const entries = Object.entries(changes ?? {});
         if (!entries.length) return 0;
         for (const [column] of entries) if (!allowed.has(column)) throw new Error(`unsupported hublot field: ${column}`);
-        return (await database.run(`UPDATE hublots SET ${entries.map(([column]) => `${column} = ?`).join(", ")} WHERE id = ?`, ...entries.map(([, value]) => value), id)).changes;
+        return (await database.run(`UPDATE hublots SET ${updateAssignments(entries)} WHERE id = ?`, ...entries.map(([, value]) => value), id)).changes;
       },
       delete: async (id) => (await database.run("DELETE FROM hublots WHERE id = ?", id)).changes,
       appendLifecycleEvent: async ({ hublotId, status, desiredState, publicUrl = null, error = null, createdAt }) => (await database.get(`
@@ -363,7 +367,7 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
         const entries = Object.entries(changes ?? {});
         if (!entries.length) return 0;
         for (const [column] of entries) if (!allowed.has(column)) throw new Error(`unsupported hublot process field: ${column}`);
-        return (await database.run(`UPDATE hublot_processes SET ${entries.map(([column]) => `${column} = ?`).join(", ")} WHERE id = ?`, ...entries.map(([, value]) => value), id)).changes;
+        return (await database.run(`UPDATE hublot_processes SET ${updateAssignments(entries)} WHERE id = ?`, ...entries.map(([, value]) => value), id)).changes;
       },
       listProcesses: async (hublotId) => (await database.all("SELECT * FROM hublot_processes WHERE hublot_id = ? ORDER BY started_at, id", hublotId)).map((row) => ({ ...row })),
     }),
@@ -418,7 +422,7 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
         const entries = Object.entries(changes ?? {});
         if (!entries.length) return 0;
         for (const [column] of entries) if (!allowed.has(column)) throw new Error(`unsupported pinned widget field: ${column}`);
-        return (await database.run(`UPDATE pinned_widgets SET ${entries.map(([column]) => `${column} = ?`).join(", ")} WHERE id = ?`, ...entries.map(([, value]) => value), id)).changes;
+        return (await database.run(`UPDATE pinned_widgets SET ${updateAssignments(entries)} WHERE id = ?`, ...entries.map(([, value]) => value), id)).changes;
       },
       delete: async (id) => (await database.run("DELETE FROM pinned_widgets WHERE id = ?", id)).changes,
       nextPosition: async ({ ownerId = null, scope, groupId = null }) => Number((await database.get(`
@@ -462,7 +466,7 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
         const entries = Object.entries(changes ?? {});
         if (!entries.length) return 0;
         for (const [column] of entries) if (!allowed.has(column)) throw new Error(`unsupported pinned widget group field: ${column}`);
-        return (await database.run(`UPDATE pinned_widget_groups SET ${entries.map(([column]) => `${column} = ?`).join(", ")} WHERE id = ?`, ...entries.map(([, value]) => value), id)).changes;
+        return (await database.run(`UPDATE pinned_widget_groups SET ${updateAssignments(entries)} WHERE id = ?`, ...entries.map(([, value]) => value), id)).changes;
       },
       deleteGroup: async (id) => (await database.run("DELETE FROM pinned_widget_groups WHERE id = ?", id)).changes,
       nextGroupPosition: async ({ ownerId = null, scope }) => Number((await database.get(`
@@ -520,7 +524,7 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
         const entries = Object.entries(changes ?? {});
         if (!entries.length) return 0;
         for (const [column] of entries) if (!allowed.has(column)) throw new Error(`unsupported runner field: ${column}`);
-        return (await database.run(`UPDATE runners SET ${entries.map(([column]) => `${column} = ?`).join(", ")} WHERE id = ?`, ...entries.map(([, value]) => value), id)).changes;
+        return (await database.run(`UPDATE runners SET ${updateAssignments(entries)} WHERE id = ?`, ...entries.map(([, value]) => value), id)).changes;
       },
       setDefault: async (id) => {
         if (id != null && !await rawRepositories.runners.find(id)) throw new Error(`no such runner: ${id}`);

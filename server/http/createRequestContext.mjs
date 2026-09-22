@@ -220,7 +220,10 @@ export function createRequestContext(state, { now = Date.now, logger = console }
     }
     recordAuthFailure(ip);
     const seen = Object.entries(candidates)
-      .map(([key, value]) => `${key}=${value ? `present(${String(value).length})` : "-"}`)
+      .map(([key, value]) => {
+        const presence = value ? `present(${String(value).length})` : "-";
+        return `${key}=${presence}`;
+      })
       .join(" ");
     const safeLogValue = (value) => String(value ?? "-").replace(/[\x00-\x1f\x7f]/g, "_");
     logger.log(`[auth-fail] ${safeLogValue(req.method)} ${safeLogValue(url.pathname)} from ${safeLogValue(ip)} | ${seen} | ua=${safeLogValue(req.headers["user-agent"])}`);

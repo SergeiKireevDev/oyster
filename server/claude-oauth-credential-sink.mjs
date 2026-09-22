@@ -109,8 +109,9 @@ export async function refreshAnthropicOAuthGrant(refreshToken, { fetchImpl = fet
   try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
   if (!response.ok) {
     const code = plainObject(payload) && typeof payload.error === "string" ? payload.error : "";
+    const codeSuffix = code ? ` ${code}` : "";
     throw refreshError(
-      `Anthropic token refresh was rejected (${response.status}${code ? ` ${code}` : ""})`,
+      `Anthropic token refresh was rejected (${response.status}${codeSuffix})`,
       { status: response.status, invalidGrant: code === "invalid_grant" },
     );
   }

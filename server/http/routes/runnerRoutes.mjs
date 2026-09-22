@@ -134,7 +134,10 @@ async function streamSubagentLifecycle({
     else if (event.type === "agent_settled") finish({ ok: !assistantError, output: assistantOutput, errorLog: assistantError });
     else if (event.type === "response" && event.command === "prompt" && event.success === false) fail("Subagent prompt was rejected.", event.error);
     else if (event.type === "pi_error") fail("Subagent process failed.", event.error);
-    else if (event.type === "pi_exit") fail(`Subagent exited before settling${event.signal ? ` (${event.signal})` : ""}.`);
+    else if (event.type === "pi_exit") {
+      const signalSuffix = event.signal ? ` (${event.signal})` : "";
+      fail(`Subagent exited before settling${signalSuffix}.`);
+    }
   };
 
   try {
