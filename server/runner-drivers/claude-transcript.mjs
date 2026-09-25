@@ -95,8 +95,23 @@ export function claudeRecordsToSessionEntries(records) {
   const entries = [];
   const toolNames = new Map();
   const leafByRecord = new Map();
+  const costMessages = new Map();
+  let latestCostMessage = null;
+  let accountedCost = 0;
   let latestLeaf = null;
   for (const record of records) {
+    // These session-wide snapshots have no UUID and must be handled before
+    // the message-entry filter. Only book the unaccounted delta: snapshots
+    // are cumulative and can be repeated, including after a resume.
+    if (record?.type === "cost-state" && record.isSidechain !== true) {
+      const total = record.totalCostUSD;
+      if (latestCostMessage && typeof total === "number" && Number.isFinite(total) && total > accountedCost) {
+        // Claude does not provide per-message prices. Carry the reported
+        // aggregate delta on the latest response; leave the breakdown unset.
+        latestCostMessage.usage.cost.total += total - accountedCost;
+        accountedCost = total;
+      }
+    }
     const sourceId = typeof record?.uuid === "string" && record.uuid ? record.uuid : null;
     if (!sourceId) continue;
     let parentId = typeof record.parentUuid === "string"
@@ -106,6 +121,18 @@ export function claudeRecordsToSessionEntries(records) {
     for (let index = 0; index < messages.length; index++) {
       const message = messages[index];
       const id = messages.length === 1 ? sourceId : `${sourceId}:${message.role}:${index}`;
+      if (message.role === "assistant") {
+        // Split assistant records share response-level usage. Keep their
+        // costs in sync: the header reads the last part, while analytics
+        // deduplicates by response ID and retains the first.
+        const key = message.responseId ?? id;
+        if (!costMessages.has(key)) {
+          costMessages.set(key, message);
+          accountedCost += message.usage.cost.total;
+        }
+        latestCostMessage = costMessages.get(key);
+        message.usage.cost = latestCostMessage.usage.cost;
+      }
       entries.push({
         type: "message",
         id,
