@@ -61,6 +61,21 @@ test("Claude JSONL sink creates, incrementally updates, and rebuilds a pi SQLite
   assert.equal(rebuilt.rebuilt, true);
   transcript = await catalog.messages(sessionId);
   assert.equal(transcript.messages[0].content[0].text, "corrected");
+
+  // Cost snapshots arrive after the messages and lack UUIDs. Reconciliation
+  // must update existing materialized usage, not just append new messages.
+  const cost = { type: "cost-state", sessionId, totalCostUSD: 0.75 };
+  await appendFile(sourcePath, line(cost));
+  const costUpdate = await sink.sync({ sessionId, cwd: join(root, "workspace") });
+  assert.equal(costUpdate.changed, true);
+  transcript = await catalog.messages(sessionId);
+  assert.equal(transcript.messages.length, 3);
+  assert.equal(transcript.messages[1].usage.cost.total, 0.75);
+  assert.equal((await catalog.usageAnalytics()).total.cost, 0.75);
+
+  await appendFile(sourcePath, line(cost));
+  assert.equal((await sink.sync({ sessionId, cwd: join(root, "workspace") })).changed, false);
+  assert.equal((await catalog.usageAnalytics()).total.cost, 0.75);
 });
 
 test("Claude JSONL sink tolerates missing transcripts and incomplete appended lines", async (t) => {
