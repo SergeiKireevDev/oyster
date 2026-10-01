@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Compatibility patch for the pinned pi generator after models.dev renamed
- * kimi-for-coding to regional catalog keys. Keep the existing api.kimi.com
- * endpoint paired with the CN catalog; do not silently switch credential regions.
+ * Compatibility patches for the pinned pi build and changing model catalogs:
+ * - Keep api.kimi.com paired with the renamed CN catalog, not another region.
+ * - Declare Fireworks' supported APIs independently of the generated models.
  * Applied before bundled pi builds and inside Docker build copies.
- * Remove once the pinned pi generator supports the renamed provider natively.
+ * Remove each patch once the pinned pi source incorporates its fix.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -24,14 +24,32 @@ export function patchLocalPiModels(source) {
   return source.replace(BEFORE, AFTER);
 }
 
+const FIREWORKS_BEFORE = `export function fireworksProvider(): Provider<"anthropic-messages" | "openai-completions"> {
+\treturn createProvider({`;
+const FIREWORKS_AFTER = `export function fireworksProvider(): Provider<"anthropic-messages" | "openai-completions"> {
+\treturn createProvider<"anthropic-messages" | "openai-completions">({`;
+
+export function patchFireworksProvider(source) {
+  if (source.includes(FIREWORKS_AFTER) && !source.includes(FIREWORKS_BEFORE)) return source;
+  if (source.split(FIREWORKS_BEFORE).length !== 2 || source.includes(FIREWORKS_AFTER)) {
+    throw new Error("Unsupported pi Fireworks provider: review the API type compatibility patch before building");
+  }
+  return source.replace(FIREWORKS_BEFORE, FIREWORKS_AFTER);
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    if (process.argv.length !== 3) throw new Error("Usage: patch-local-pi-models.mjs GENERATOR_PATH");
-    const path = process.argv[2];
-    const source = readFileSync(path, "utf8");
-    const patched = patchLocalPiModels(source);
-    if (patched !== source) writeFileSync(path, patched);
-    console.log("Kimi model catalog compatibility patch ready");
+    if (process.argv.length !== 4) throw new Error("Usage: patch-local-pi-models.mjs GENERATOR_PATH FIREWORKS_PROVIDER_PATH");
+    // Validate both inputs before writing either, so source drift fails closed.
+    const patches = [patchLocalPiModels, patchFireworksProvider].map((patch, index) => {
+      const path = process.argv[index + 2];
+      const source = readFileSync(path, "utf8");
+      return { path, source, patched: patch(source) };
+    });
+    for (const { path, source, patched } of patches) {
+      if (patched !== source) writeFileSync(path, patched);
+    }
+    console.log("Kimi catalog and Fireworks API compatibility patches ready");
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;
