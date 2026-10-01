@@ -23,10 +23,10 @@ WORKDIR /src
 COPY pi/package.json pi/package-lock.json pi/.npmrc pi/tsconfig.json pi/tsconfig.base.json pi/biome.json ./
 COPY pi/scripts ./scripts
 COPY pi/packages ./packages
-# The pinned generator predates models.dev's regional Kimi catalog keys.
-# Patch the build copy only; keep the configured api.kimi.com credential region.
+# Patch the build copy for Kimi catalog renames and Fireworks API type inference.
+# Preserve credential regions and supported APIs when the live catalog changes.
 COPY scripts/patch-local-pi-models.mjs /tmp/patch-local-pi-models.mjs
-RUN node /tmp/patch-local-pi-models.mjs /src/packages/ai/scripts/generate-models.ts
+RUN node /tmp/patch-local-pi-models.mjs /src/packages/ai/scripts/generate-models.ts /src/packages/ai/src/providers/fireworks.ts
 # The AI package's generated TypeScript imports ignored JSON model data, so its
 # package build must hydrate that data before compiling a clean source checkout.
 # Remove copied model data first: Docker OverlayFS can keep that directory in a
