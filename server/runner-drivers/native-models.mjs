@@ -3,6 +3,7 @@ import { CODEX_OPENROUTER_ARGS } from "../openrouter-routing.mjs";
 import { createInterface } from "node:readline";
 const PROCESS_KILL_GRACE_MS = 1000;
 const JSON_RPC_SERVER_ERROR_CODE = -32000;
+const JSON_RPC_INTERNAL_ERROR_CODE = -32603;
 
 
 /** Short-lived native protocol connection. Never sends a prompt or logs credentials. */
@@ -54,14 +55,23 @@ export async function withNativeRpc({ bin, args, cwd, env, signal, timeout = 200
   }
 }
 
+async function codexAccountMayExist(rpc) {
+  try {
+    const { account } = await rpc("account/read", { refreshToken: false });
+    return Boolean(account);
+  } catch (error) {
+    if (error.code === JSON_RPC_INTERNAL_ERROR_CODE) return true;
+    throw error;
+  }
+}
+
 export function discoverCodexModels(options) {
   return withNativeRpc({ ...options, args: ["app-server", "--stdio", ...(options.provider === "openrouter" ? CODEX_OPENROUTER_ARGS : [])] }, async (rpc, notify) => {
     await rpc("initialize", { clientInfo: { name: "oyster", version: "1.0.0" } });
     notify("initialized");
-    if (options.provider !== "openrouter") {
-      const { account } = await rpc("account/read", { refreshToken: false });
-      if (!account) return [];
-    }
+    // Codex 0.171+ resolves workspace routing over the network inside account/read; when that
+    // lookup fails the account state is unknown, so the locally served catalog is still listed.
+    if (options.provider !== "openrouter" && !await codexAccountMayExist(rpc)) return [];
     const models = [];
     let cursor = null;
     const cursors = new Set();

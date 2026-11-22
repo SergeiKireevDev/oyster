@@ -49,9 +49,9 @@ LABEL org.opencontainers.image.pi-source="local-build-context" \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git curl ca-certificates procps ripgrep lsof python3 ffmpeg \
-    && npm install --global @anthropic-ai/claude-code@2.1.260 @openai/codex@0.153.4 @google/gemini-cli@0.58.0 \
-    && claude --version | grep -q '^2\.1\.260 ' \
-    && codex --version | grep -q '0\.153\.4' \
+    && npm install --global @anthropic-ai/claude-code@2.1.330 @openai/codex@0.171.0 @google/gemini-cli@0.58.0 \
+    && claude --version | grep -q '^2\.1\.330 ' \
+    && codex --version | grep -q '0\.171\.0' \
     && gemini --version | grep -q '^0\.58\.0' \
     && curl -fsSL -o /tmp/install-amp.sh https://ampcode.com/install.sh \
     && AMP_HOME=/opt/amp AMP_VERSION=0.0.1788696031-g14d695 bash /tmp/install-amp.sh \

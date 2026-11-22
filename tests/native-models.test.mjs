@@ -44,6 +44,20 @@ test("Codex without an account returns zero models without a prompt", async () =
   assert.equal(f.requests.some((r) => r.method === "model/list"), false);
 });
 
+test("Codex still lists its catalog when account/read cannot resolve workspace routing", async () => {
+  const f = fixture(({ method }) => {
+    if (method === "account/read") return { error: { code: -32603, message: "workspace routing discovery failed" } };
+    if (method === "model/list") return { result: { data: [{ model: "gpt-6.2-sol", displayName: "GPT-6.2-Sol" }] } };
+    return { result: {} };
+  });
+  assert.deepEqual(await discoverCodexModels(f.options), [{ provider: "openai", id: "gpt-6.2-sol", name: "GPT-6.2-Sol" }]);
+});
+
+test("Codex account/read protocol failures other than internal errors remain errors", async () => {
+  const f = fixture(({ method }) => method === "account/read" ? { error: { code: -32601, message: "no such method" } } : { result: {} });
+  await assert.rejects(discoverCodexModels(f.options), /no such method/);
+});
+
 test("Gemini uses ACP model IDs instead of Pi's API catalog", async () => {
   const f = fixture(({ method }) => ({ result: method === "session/new"
     ? { models: { availableModels: [{ modelId: "auto-gemini", name: "Auto" }] } } : {} }));
