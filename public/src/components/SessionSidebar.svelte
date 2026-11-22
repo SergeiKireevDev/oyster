@@ -627,7 +627,7 @@
       <span class="session-sidebar-copy">
         <span class="session-sidebar-titleline">
           <span class="session-sidebar-name">{label(session, runner)}</span>
-          {#if presence.unread}<span class="session-thread-unread" role="img" aria-label={presence.unreadLabel} title={presence.unreadLabel}></span>{/if}
+          {#if presence.unread && !timelineStatus}<span class="session-thread-unread" role="img" aria-label={presence.unreadLabel} title={presence.unreadLabel}></span>{/if}
           <HarnessPill harness={sessionHarness(session, runner)} />
         </span>
         {#if meta}
