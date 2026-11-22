@@ -136,6 +136,12 @@ test("a question about selected text opens a thread that lives inside its sessio
   await expect.poll(() => sessionPath(page)).toBe(rootPath);
   await expect(page.locator(".thread-pill")).toContainText("1 thread");
 
+  // The tree closes from its own button, without navigating.
+  await page.locator("#threadTreeBtn").click();
+  await page.getByRole("button", { name: "Close thread tree" }).click();
+  await expect(page.locator("#overlay")).not.toHaveClass(/\bopen\b/);
+  await expect.poll(() => sessionPath(page)).toBe(rootPath);
+
   // A breadcrumb leads back up from inside a thread.
   await page.locator("#threadTreeBtn").click();
   await page.locator(".thread-node", { hasText: "How?" }).click();

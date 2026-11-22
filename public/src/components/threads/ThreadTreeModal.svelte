@@ -3,6 +3,7 @@
   import { scrollIntoViewWhen } from "../../lib/modalDomAdapters.js";
   import { getUiActionRegistry } from "../../runtime/uiActionContext.js";
   import { THREAD_NAVIGATE_ACTION } from "../../runtime/uiActionNames.js";
+  import { closeModalState } from "../../stores/modal.js";
   import { threadView } from "../../stores/threads.js";
 
   /**
@@ -50,14 +51,20 @@
 </script>
 
 <div class="thread-tree">
+  <!-- Always reachable: on a phone the tree fills the screen, leaving no backdrop to tap and no Escape key. -->
+  <div class="thread-tree-bar">
+    {#if nodes.length > 1}
+      <div class="thread-tree-controls" role="group" aria-label="Zoom">
+        <button type="button" aria-label="Zoom out" disabled={zoom <= ZOOM_MIN} onclick={zoomOut}>−</button>
+        <button type="button" class="thread-tree-zoom" title="Reset zoom" onclick={resetZoom}>{zoomLabel}</button>
+        <button type="button" aria-label="Zoom in" disabled={zoom >= ZOOM_MAX} onclick={zoomIn}>+</button>
+      </div>
+    {/if}
+    <button type="button" class="thread-tree-close" data-modal-cancel aria-label="Close thread tree" title="Close" onclick={closeModalState}>✕</button>
+  </div>
   {#if nodes.length <= 1}
     <p class="thread-tree-empty">No threads yet. Select text in a reply and pick a question to open one.</p>
   {:else}
-    <div class="thread-tree-controls" role="group" aria-label="Zoom">
-      <button type="button" aria-label="Zoom out" disabled={zoom <= ZOOM_MIN} onclick={zoomOut}>−</button>
-      <button type="button" class="thread-tree-zoom" title="Reset zoom" onclick={resetZoom}>{zoomLabel}</button>
-      <button type="button" aria-label="Zoom in" disabled={zoom >= ZOOM_MAX} onclick={zoomIn}>+</button>
-    </div>
     <div class="thread-tree-viewport">
       <div class="thread-tree-sizer" style:width={`${canvasWidth * zoom}px`} style:height={`${canvasHeight * zoom}px`}>
         <div class="thread-tree-canvas" style:width={`${canvasWidth}px`} style:height={`${canvasHeight}px`} style:transform={`scale(${zoom})`}>
@@ -104,11 +111,35 @@
     gap: 10px;
   }
 
+  .thread-tree-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+
+  .thread-tree-close {
+    display: grid;
+    width: 32px;
+    height: 30px;
+    flex: none;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .thread-tree-close:hover { border-color: var(--accent); background: var(--surface-hover); }
+  .thread-tree-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
   .thread-tree-empty { margin: 8px 0; color: var(--muted); font-size: 13.5px; }
 
   .thread-tree-controls {
     display: flex;
-    align-self: flex-end;
     gap: 4px;
   }
 
@@ -210,6 +241,7 @@
   @media (max-width: 760px) {
     .thread-tree-viewport { max-height: calc(100dvh - 190px); }
     .thread-tree-controls button { min-width: 38px; height: 36px; }
+    .thread-tree-close { width: 44px; height: 36px; font-size: 16px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
