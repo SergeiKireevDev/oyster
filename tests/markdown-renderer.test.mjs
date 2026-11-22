@@ -18,7 +18,7 @@ test("markdown renderer rejects active markup and non-HTTP link protocols", () =
     '```"><svg onload="alert(1)">',
     "code",
     "```",
-    String.raw`$\href{javascript:alert(1)}{unsafe}$`,
+    String.raw`$$\href{javascript:alert(1)}{unsafe}$$`,
   ].join("\n\n"));
 
   assert.match(html, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
@@ -81,11 +81,18 @@ test("markdown renderer owns source normalization as well as sanitization", () =
 });
 
 test("markdown renderer supports inline and display math without rendering math inside code", () => {
-  const html = renderSanitizedMarkdown("Euler: $e^{i\\pi}+1=0$ and `cost = $5`.\n\n$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$");
+  const html = renderSanitizedMarkdown("Euler: \\(e^{i\\pi}+1=0\\) and `cost = $5`.\n\n$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$");
   assert.match(html, /class="katex"/);
   assert.match(html, /class="math-block"/);
   assert.match(html, /<code>cost = \$5<\/code>/);
   assert.doesNotMatch(html, /katex-error/);
+});
+
+test("markdown renderer treats a single dollar sign as text and only $$ as math", () => {
+  const html = renderSanitizedMarkdown("It costs $5 and $10, see $HOME/bin.\n\nInline $$x^2$$ here.");
+  assert.match(html, /<p>It costs \$5 and \$10, see \$HOME\/bin\.<\/p>/);
+  assert.equal(html.match(/class="katex"/g)?.length, 1);
+  assert.match(html, /Inline <span class="katex-display">/);
 });
 
 test("markdown renderer keeps loose ordered lists in one numbering sequence", () => {
