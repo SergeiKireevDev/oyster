@@ -11,9 +11,15 @@ export function eventLifecycleLogged(type) {
 
 const STATE_REFRESHING_COMMANDS = new Set(["set_model", "set_thinking_level", "cycle_thinking_level", "new_session", "switch_session", "compact", "set_session_name"]);
 
+// Native-harness drivers push a get_state response when the model, effort, or
+// session identity changes underneath the browser. Transcript-save pushes are
+// frequent and carry nothing the header shows, so they are left out.
+const DRIVER_STATE_PUSH_ID = /^_driver-[a-z-]+-(?:settings|state|init)$/;
+
 /** Whether an RPC response requires a cheap authoritative state refresh. */
-export function stateRefreshRequired(command) {
-  return STATE_REFRESHING_COMMANDS.has(command);
+export function stateRefreshRequired(command, id = null) {
+  return STATE_REFRESHING_COMMANDS.has(command)
+    || (command === "get_state" && typeof id === "string" && DRIVER_STATE_PUSH_ID.test(id));
 }
 
 /** Handle live runner exit without surfacing replayed historical exits. */
@@ -21,7 +27,7 @@ export function stateRefreshRequired(command) {
 export function createResponseEventController({ handleResponse, refreshRequired, refreshState }) {
   return (message) => {
     handleResponse(message);
-    if (refreshRequired(message.command)) refreshState();
+    if (refreshRequired(message.command, message.id)) refreshState();
   };
 }
 

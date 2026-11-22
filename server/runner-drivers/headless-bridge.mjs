@@ -10,7 +10,7 @@ import {
   chmodSync, closeSync, constants, fstatSync, mkdtempSync, openSync,
   readFileSync, rmSync, writeFileSync,
 } from "node:fs";
-import { createCodexSessionModelReader } from "./codex-session-model.mjs";
+import { createCodexSessionStateReader } from "./codex-session-model.mjs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -86,6 +86,8 @@ function codexArgs(run) {
     ...(config.systemPrompt ? ["-c", `developer_instructions=${tomlString(config.systemPrompt)}`] : []),
     ...(run.model ? ["--model", run.model] : config.provider === "openrouter" ? ["--model", "openai/gpt-5.4"] : []),
     ...(Array.isArray(config.extraArgs) ? config.extraArgs : []),
+    // After extraArgs: the level picked in Oyster overrides a configured default.
+    ...(run.effort ? ["-c", `model_reasoning_effort=${tomlString(run.effort)}`] : []),
     ...(config.provider === "openrouter" ? CODEX_OPENROUTER_ARGS : []),
   ];
   if (run.resume && run.sessionId) {
@@ -130,6 +132,7 @@ function antigravityArgs(run) {
     ...(Array.isArray(config.extraArgs) ? config.extraArgs : []),
     "--output-format", "stream-json", "--disable-slash-commands",
     ...(run.model ? ["--model", run.model] : []),
+    ...(run.effort ? ["--effort", run.effort] : []),
     ...(run.resume && run.sessionId ? ["--conversation", run.sessionId] : []),
     "--print", config.systemPrompt && !run.resume ? `${config.systemPrompt}\n\n${run.prompt}` : run.prompt,
   ];
@@ -194,10 +197,11 @@ function spawnChild(run) {
   let readModel = null;
   let reportedModel = null;
   const reportModel = () => {
-    const model = readModel?.();
-    if (model && model !== reportedModel) {
-      reportedModel = model;
-      output({ type: "oyster.bridge.session_model", model });
+    const state = readModel?.();
+    const reported = state ? `${state.model.id}\n${state.effort ?? ""}` : null;
+    if (reported && reported !== reportedModel) {
+      reportedModel = reported;
+      output({ type: "oyster.bridge.session_model", model: state.model.id, effort: state.effort });
     }
   };
   const modelTimer = config.kind === "codex" ? setInterval(reportModel, CODEX_MODEL_POLL_INTERVAL_MS) : null;
@@ -208,7 +212,7 @@ function spawnChild(run) {
         const record = JSON.parse(line);
         if (record.type === "thread.started" && record.thread_id) {
           process.stdout.write(`${line}\n`);
-          readModel = createCodexSessionModelReader(env.CODEX_HOME || join(homedir(), ".codex"), record.thread_id);
+          readModel = createCodexSessionStateReader(env.CODEX_HOME || join(homedir(), ".codex"), record.thread_id);
           reportModel();
           return;
         }
@@ -254,6 +258,7 @@ function runPrompt(message) {
     resume: message.resume === true,
     steer: message.steer === true,
     model: typeof message.model === "string" && message.model ? message.model : null,
+    effort: typeof message.effort === "string" && /^[a-z][a-z0-9_-]*$/i.test(message.effort) ? message.effort : null,
   };
   if (config.kind === "amp" && child?.stdin?.writable && childMode !== run.model) {
     queue.push(run);
@@ -282,8 +287,8 @@ function abortTurn() {
 }
 
 if (config.kind === "codex" && config.resumeSessionId) {
-  const model = createCodexSessionModelReader(nativeEnvironment().CODEX_HOME || join(homedir(), ".codex"), config.resumeSessionId)();
-  if (model) output({ type: "oyster.bridge.session_model", model });
+  const saved = createCodexSessionStateReader(nativeEnvironment().CODEX_HOME || join(homedir(), ".codex"), config.resumeSessionId)();
+  if (saved) output({ type: "oyster.bridge.session_model", model: saved.model.id, effort: saved.effort });
 }
 
 const input = createInterface({ input: process.stdin });

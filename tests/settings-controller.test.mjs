@@ -46,3 +46,67 @@ test("Amp picker labels mode selection and refreshes state after selecting", asy
   assert.equal(title, "Select mode");
   assert.equal(refreshed, true);
 });
+
+function thinkingController({ levelsData, state = {}, pick = 0 }) {
+  const calls = []; const toasts = []; const pickers = []; let refreshed = 0;
+  const controller = createSettingsController({
+    rpc: async (request) => { calls.push(request); return request.type === "get_available_thinking_levels" ? levelsData : {}; },
+    pickOption: async (...args) => { pickers.push(args); return typeof pick === "function" ? pick(...args) : pick; },
+    refreshState: () => { refreshed += 1; }, toast: (...args) => toasts.push(args), getState: () => state,
+  });
+  return { controller, calls, toasts, pickers, refreshed: () => refreshed };
+}
+
+test("thinking selector offers the harness levels, marks current and default, and applies the choice", async () => {
+  const t = thinkingController({ levelsData: { levels: ["low", "medium", "high"], current: "medium", defaultLevel: "low" }, pick: 2 });
+  await t.controller.chooseThinking();
+  assert.deepEqual(t.pickers, [["Select thinking level", ["low — default", "medium", "high"], { selected: 1 }]]);
+  assert.deepEqual(t.calls, [{ type: "get_available_thinking_levels" }, { type: "set_thinking_level", level: "high" }]);
+  assert.deepEqual(t.toasts, [["thinking: high"]]);
+  assert.equal(t.refreshed(), 1);
+});
+
+test("thinking selector falls back to session state for harnesses that only list levels", async () => {
+  const t = thinkingController({ levelsData: { levels: ["off", "low", "high"] }, state: { thinkingLevel: "high" }, pick: 2 });
+  await t.controller.chooseThinking();
+  assert.deepEqual(t.pickers[0][2], { selected: 2 });
+  assert.deepEqual(t.calls, [{ type: "get_available_thinking_levels" }], "re-selecting the active level changes nothing");
+});
+
+test("thinking selector explains harnesses and models without adjustable levels", async () => {
+  const fail = () => assert.fail("no picker");
+  let t = thinkingController({ levelsData: { levels: [], hint: "Use the mode picker instead." }, pick: fail });
+  await t.controller.chooseThinking();
+  assert.deepEqual(t.toasts, [["Use the mode picker instead."]]);
+  t = thinkingController({ levelsData: { levels: [] }, pick: fail });
+  await t.controller.chooseThinking();
+  assert.deepEqual(t.toasts, [["Thinking level is not adjustable for this model."]]);
+  t = thinkingController({ levelsData: { levels: ["off"] }, state: { thinkingLevel: "off" }, pick: fail });
+  await t.controller.chooseThinking();
+  assert.deepEqual(t.toasts, [["Thinking level is fixed at off for this model."]]);
+});
+
+test("thinking selector cancels quietly and reports a rejected level", async () => {
+  let t = thinkingController({ levelsData: { levels: ["low", "high"], current: "low" }, pick: null });
+  await t.controller.chooseThinking();
+  assert.equal(t.calls.length, 1);
+  assert.deepEqual(t.toasts, []);
+  const toasts = [];
+  const controller = createSettingsController({
+    rpc: async (request) => { if (request.type === "set_thinking_level") throw new Error("model kept high"); return { levels: ["low", "high"], current: "high" }; },
+    pickOption: async () => 0, refreshState() {}, toast: (...args) => toasts.push(args), getState: () => ({}),
+  });
+  await controller.chooseThinking();
+  assert.deepEqual(toasts, [["model kept high", "error"]]);
+});
+
+test("the config menu opens the thinking selector", async () => {
+  const titles = [];
+  const controller = createSettingsController({
+    rpc: async () => ({ levels: ["low", "high"], current: "low" }),
+    pickOption: async (title, options) => { titles.push([title, options]); return titles.length === 1 ? 1 : null; },
+    refreshState() {}, toast() {}, getState: () => ({ model: { id: "m" }, thinkingLevel: null }),
+  });
+  await controller.openConfig();
+  assert.deepEqual(titles, [["Settings", ["Model: m — change…", "Thinking: default — change…"]], ["Select thinking level", ["low", "high"]]]);
+});

@@ -18,8 +18,12 @@ function fakeProcess() {
   return child;
 }
 
+function lines(stream) {
+  return String(stream.read() ?? "").trim().split("\n").filter(Boolean).map((text) => JSON.parse(text));
+}
+
 function line(stream) {
-  return JSON.parse(String(stream.read()).trim());
+  return lines(stream)[0];
 }
 
 function driverStub(id, backend = id) {
@@ -144,18 +148,20 @@ test("Claude Code driver translates init, messages, tools, results, and local RP
     type: "response", id: "state-before", command: "get_state", success: true,
     data: {
       sessionId: runner.driverRuntime.sessionId, sessionName: null, sessionFile: null, sessionInitialized: false,
-      model: null, thinkingLevel: "off", messageCount: 0, pendingMessageCount: 0,
+      model: null, thinkingLevel: null, messageCount: 0, pendingMessageCount: 0,
       isStreaming: false, isCompacting: false,
     },
   });
   assert.ok(localEvents[0].data.sessionId);
-  assert.equal(child.stdin.read(), null, "reading state must not submit a prompt");
+  assert.deepEqual(lines(child.stdin), [
+    { type: "control_request", request_id: "oyster-settings-state-before", request: { subtype: "get_settings" } },
+  ], "reading state probes effective settings but must not submit a prompt");
   localEvents.length = 0;
   assert.deepEqual(driver.decodeLine(runner, JSON.stringify({ type: "system", subtype: "init", session_id: "cc-1", model: "claude-sonnet-4-5" })), [{
     type: "response", id: "_driver-claude-init", command: "get_state", success: true,
     data: {
       sessionId: "cc-1", sessionName: null, sessionFile: null, sessionInitialized: true,
-      model: { provider: "anthropic", id: "claude-sonnet-4-5" }, thinkingLevel: "off",
+      model: { provider: "anthropic", id: "claude-sonnet-4-5" }, thinkingLevel: null,
       messageCount: 0, pendingMessageCount: 0, isStreaming: false, isCompacting: false,
     },
   }]);
@@ -232,12 +238,18 @@ test("Claude Code driver translates init, messages, tools, results, and local RP
     type: "response", id: "models-error", command: "get_available_models", success: false, error: "catalog unavailable",
   }]);
   assert.equal(driver.sendCommand(runner, child, { id: "model-1", type: "set_model", provider: "anthropic", modelId: "opus" }), true);
-  assert.deepEqual(line(child.stdin), {
-    type: "control_request", request_id: "oyster-model-model-1", request: { subtype: "set_model", model: "opus" },
-  });
+  assert.deepEqual(lines(child.stdin), [
+    { type: "control_request", request_id: "oyster-model-model-1", request: { subtype: "set_model", model: "opus" } },
+  ]);
   assert.deepEqual(driver.decodeLine(runner, JSON.stringify({
     type: "control_response", response: { subtype: "success", request_id: "oyster-model-model-1" },
   })), [{ type: "response", id: "model-1", command: "set_model", success: true, data: {} }]);
+  assert.deepEqual(lines(child.stdin), [
+    { type: "control_request", request_id: "oyster-settings-model-1", request: { subtype: "get_settings" } },
+  ], "the effort is re-read only after the model switch landed");
+  assert.deepEqual(driver.decodeLine(runner, JSON.stringify({
+    type: "control_response", response: { subtype: "success", request_id: "oyster-settings-model-1", response: { applied: { model: "claude-opus-5-5", effort: "high" } } },
+  })).map((event) => [event.id, event.data.thinkingLevel, event.data.model.id]), [["_driver-claude-settings", "high", "opus"]]);
 
   assert.deepEqual(driver.decodeLine(runner, JSON.stringify({ type: "result", subtype: "success", session_id: "cc-1" })), [
     { type: "agent_end", willRetry: false }, { type: "agent_settled" },

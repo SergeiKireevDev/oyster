@@ -73,6 +73,35 @@ function availableModels(records, currentModel = null, provider = "anthropic") {
   return models;
 }
 
+/** Every effort Claude Code accepts; each model supports a subset reported by list_models. */
+export const CLAUDE_EFFORT_LEVELS = Object.freeze(["low", "medium", "high", "xhigh", "max"]);
+
+function claudeModelCapabilities(runtime) {
+  // Launch reports e.g. `claude-opus-5-5[1m]`; the catalog lists the bare id or an alias.
+  const model = String(runtime.model ?? "").replace(/\[[^\]]*\]$/, "");
+  const records = Array.isArray(runtime.modelRecords) ? runtime.modelRecords : [];
+  if (!model) return null;
+  return records.find((record) => record?.value === model) ?? records.find((record) => record?.resolvedModel === model) ?? null;
+}
+
+function claudeThinkingLevels(runtime) {
+  const record = claudeModelCapabilities(runtime);
+  // An unlisted model (custom id, older catalog) may still take any effort; Claude Code confirms on apply.
+  if (!record) return [...CLAUDE_EFFORT_LEVELS];
+  if (record.supportsEffort !== true) return [];
+  const supported = Array.isArray(record.supportedEffortLevels) ? record.supportedEffortLevels : CLAUDE_EFFORT_LEVELS;
+  return CLAUDE_EFFORT_LEVELS.filter((level) => supported.includes(level));
+}
+
+function claudeThinkingLevelsData(runtime) {
+  const levels = claudeThinkingLevels(runtime);
+  return {
+    levels,
+    current: runtime.effort ?? null,
+    ...(!levels.length ? { hint: "This Claude model does not have adjustable effort levels." } : {}),
+  };
+}
+
 function ensureRuntime(runner) {
   const runtime = runner.driverRuntime ??= {
     sessionId: runner.sessionId ?? null,
@@ -95,7 +124,7 @@ function stateFor(runner, runtime) {
     sessionFile: null,
     sessionInitialized: runtime.initialized,
     model: runtime.model ? { provider: runtime.provider ?? "anthropic", id: runtime.model } : null,
-    thinkingLevel: "off",
+    thinkingLevel: runtime.effort ?? null,
     messageCount: runtime.messages.length,
     pendingMessageCount: 0,
     isStreaming: runtime.streaming,
@@ -112,17 +141,66 @@ function parseRecord(line) {
   }
 }
 
-function decodeControlResponse(runtime, record) {
+function decodeModelListResponse(runtime, pending, control) {
+  const succeeded = control.subtype === "success";
+  if (succeeded && Array.isArray(control.response?.models)) runtime.modelRecords = control.response.models;
+  // Without a catalog the generic effort list is still offered; applying one is what validates it.
+  if (pending.command === "get_available_thinking_levels") return [response(pending.id, pending.command, claudeThinkingLevelsData(runtime))];
+  return [succeeded
+    ? response(pending.id, pending.command, { models: availableModels(control.response?.models, runtime.model, runtime.provider) })
+    : response(pending.id, pending.command, null, false, String(control.error ?? "Claude Code could not list models"))];
+}
+
+function decodeApplyEffortResponse(runtime, pending, control) {
+  if (control.subtype === "success") return [];
+  // The paired settings read must not answer a command that already failed.
+  const confirmation = runtime.controlRequests.get(pending.confirmationId);
+  if (confirmation) confirmation.reply = null;
+  return [response(pending.id, "set_thinking_level", null, false, String(control.error ?? "Claude Code rejected the thinking level"))];
+}
+
+function effortReplyEvents(runtime, reply, confirmed) {
+  // Claude Code builds without get_settings cannot confirm; trust the accepted apply.
+  if (!confirmed) runtime.effort = reply.level;
+  if (runtime.effort !== reply.level) {
+    return [response(reply.id, "set_thinking_level", null, false,
+      `Claude Code kept thinking level ${runtime.effort ?? "default"}: ${runtime.model ?? "this model"} does not support ${reply.level}`)];
+  }
+  runtime.selectedEffort = reply.level;
+  return [response(reply.id, "set_thinking_level", { level: reply.level })];
+}
+
+/** `applied` is what Claude Code will actually send, after model clamping and defaults. */
+function decodeSettingsResponse(runner, runtime, pending, control) {
+  const confirmed = control.subtype === "success";
+  const previous = { effort: runtime.effort ?? null, model: runtime.model };
+  if (confirmed) {
+    const applied = control.response?.applied ?? {};
+    runtime.effort = CLAUDE_EFFORT_LEVELS.includes(applied.effort) ? applied.effort : null;
+    // Before the first prompt there is no init record yet; this names the model early.
+    if (!runtime.model && typeof applied.model === "string" && applied.model) runtime.model = applied.model;
+  }
+  const events = pending.reply ? effortReplyEvents(runtime, pending.reply, confirmed) : [];
+  if (previous.effort !== (runtime.effort ?? null) || previous.model !== runtime.model) {
+    events.push(response("_driver-claude-settings", "get_state", stateFor(runner, runtime)));
+  }
+  return events;
+}
+
+function decodeControlResponse(runner, runtime, record) {
   const control = record.response ?? {};
   const pending = runtime.controlRequests.get(control.request_id);
   if (!pending) return [];
   runtime.controlRequests.delete(control.request_id);
   if (pending.command === "health_probe") return [];
-  if (pending.command === "get_available_models") return [control.subtype === "success"
-    ? response(pending.id, pending.command, { models: availableModels(control.response?.models, runtime.model, runtime.provider) })
-    : response(pending.id, pending.command, null, false, String(control.error ?? "Claude Code could not list models"))];
+  if (pending.command === "get_available_models" || pending.command === "get_available_thinking_levels") return decodeModelListResponse(runtime, pending, control);
+  if (pending.command === "apply_effort") return decodeApplyEffortResponse(runtime, pending, control);
+  if (pending.command === "get_settings") return decodeSettingsResponse(runner, runtime, pending, control);
   if (control.subtype === "success") {
     runtime.model = pending.model;
+    // A model switch can clamp or drop the effort. Claude Code answers a settings read
+    // queued behind set_model with the old model, so ask only now that the switch landed.
+    if (pending.child?.stdin?.writable) sendSettingsProbe(runtime, pending.child, pending.id);
     return [response(pending.id, pending.command, {})];
   }
   return [response(pending.id, pending.command, null, false, String(control.error ?? "Claude Code rejected the model"))];
@@ -170,8 +248,28 @@ function decodeResultRecord(runtime, record) {
   return events;
 }
 
-function sendStateCommand(runner, runtime, command, emit) {
+function writeControlRequest(runtime, child, requestId, pending, request) {
+  runtime.controlRequests.set(requestId, pending);
+  child.stdin.write(`${JSON.stringify({ type: "control_request", request_id: requestId, request })}\n`);
+}
+
+/** Read the effort (and model) Claude Code will really use; `reply` answers a pending set_thinking_level. */
+function sendSettingsProbe(runtime, child, key, reply = null) {
+  const requestId = `oyster-settings-${key}`;
+  writeControlRequest(runtime, child, requestId, { command: "get_settings", reply }, { subtype: "get_settings" });
+  return requestId;
+}
+
+/** Once per process: learn the effective effort and model without waiting for a prompt. */
+function probeSettingsOnce(runtime, child, key) {
+  if (!child?.stdin?.writable || runtime.settingsProbedChild === child) return;
+  runtime.settingsProbedChild = child;
+  sendSettingsProbe(runtime, child, key);
+}
+
+function sendStateCommand(runner, runtime, child, command, emit) {
   emit(response(command.id, "get_state", stateFor(runner, runtime)));
+  probeSettingsOnce(runtime, child, command.id);
   return true;
 }
 
@@ -182,7 +280,9 @@ function sendMessagesCommand(runtime, command, emit) {
 
 function sendListModelsControl(runtime, child, command) {
   if (!child?.stdin?.writable) return false;
-  const prefix = command.type === "health_probe" ? "oyster-health" : "oyster-models";
+  // Answered in order, so the levels response already knows the current effort and model.
+  if (command.type === "get_available_thinking_levels") probeSettingsOnce(runtime, child, command.id);
+  const prefix = { health_probe: "oyster-health", get_available_thinking_levels: "oyster-levels" }[command.type] ?? "oyster-models";
   const requestId = `${prefix}-${command.id}`;
   runtime.controlRequests.set(requestId, { id: command.id, command: command.type });
   child.stdin.write(`${JSON.stringify({ type: "control_request", request_id: requestId, request: { subtype: "list_models" } })}\n`);
@@ -197,8 +297,24 @@ function sendSetModelCommand(runtime, child, command, emit) {
   }
   const requestId = `oyster-model-${command.id}`;
   const model = command.modelId.trim();
-  runtime.controlRequests.set(requestId, { id: command.id, command: command.type, model });
+  runtime.controlRequests.set(requestId, { id: command.id, command: command.type, model, child });
   child.stdin.write(`${JSON.stringify({ type: "control_request", request_id: requestId, request: { subtype: "set_model", model } })}\n`);
+  return true;
+}
+
+function sendSetThinkingLevelCommand(runtime, child, command, emit) {
+  if (!child?.stdin?.writable) return false;
+  const level = typeof command.level === "string" ? command.level.trim() : "";
+  if (!CLAUDE_EFFORT_LEVELS.includes(level)) {
+    emit(response(command.id, "set_thinking_level", null, false, `Claude Code thinking level must be one of ${CLAUDE_EFFORT_LEVELS.join(", ")}`));
+    return true;
+  }
+  // The flag-settings layer is scoped to this process, so nothing is written to the
+  // user's settings files. The settings read that follows confirms what was applied.
+  const confirmationId = `oyster-settings-${command.id}`;
+  writeControlRequest(runtime, child, `oyster-effort-${command.id}`, { id: command.id, command: "apply_effort", confirmationId },
+    { subtype: "apply_flag_settings", settings: { effortLevel: level } });
+  sendSettingsProbe(runtime, child, command.id, { id: command.id, level });
   return true;
 }
 
@@ -267,6 +383,8 @@ export function createClaudeCodeDriver({
         "--mcp-config", JSON.stringify(oysterMcpConfig({ runnerId: runner.id ?? null, sessionId, workdir: cwd, uiUrl: mcpUrl })),
         ...(systemPrompt ? ["--append-system-prompt", systemPrompt] : []),
         ...extraArgs,
+        // After extraArgs: the level picked in Oyster overrides a configured default and survives relaunches.
+        ...(runtime.selectedEffort ? ["--effort", runtime.selectedEffort] : []),
       ];
       // OYSTER_TOKEN must exist for Claude Code's `${OYSTER_TOKEN}` header expansion,
       // even when the server runs unauthenticated.
@@ -282,7 +400,7 @@ export function createClaudeCodeDriver({
       const record = parseRecord(line);
       if (!record) return [];
       const runtime = ensureRuntime(runner);
-      if (record.type === "control_response") return decodeControlResponse(runtime, record);
+      if (record.type === "control_response") return decodeControlResponse(runner, runtime, record);
       if (record.type === "system" && record.subtype === "init") return decodeInitRecord(runner, runtime, record);
       if (record.session_id) runtime.sessionId = record.session_id;
       if (record.type === "assistant") return decodeAssistantRecord(runtime, record);
@@ -294,11 +412,13 @@ export function createClaudeCodeDriver({
       const runtime = ensureRuntime(runner);
       const emit = (event) => queueMicrotask(() => runner.driverEmit?.(event));
       const handlers = {
-        get_state: () => sendStateCommand(runner, runtime, command, emit),
+        get_state: () => sendStateCommand(runner, runtime, child, command, emit),
         get_messages: () => sendMessagesCommand(runtime, command, emit),
         health_probe: () => sendListModelsControl(runtime, child, command),
         get_available_models: () => sendListModelsControl(runtime, child, command),
         set_model: () => sendSetModelCommand(runtime, child, command, emit),
+        get_available_thinking_levels: () => sendListModelsControl(runtime, child, command),
+        set_thinking_level: () => sendSetThinkingLevelCommand(runtime, child, command, emit),
         prompt: () => sendPromptCommand(runtime, child, command, emit),
         abort: () => sendAbortCommand(runtime, child, command, emit),
         set_session_name: () => sendSetSessionNameCommand(runtime, command, emit),

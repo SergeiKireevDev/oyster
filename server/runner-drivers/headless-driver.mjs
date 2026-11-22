@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { createCodexSessionModelReader } from "./codex-session-model.mjs";
+import { createCodexSessionStateReader } from "./codex-session-model.mjs";
 import { spawn } from "node:child_process";
 import { antigravityEvents } from "./antigravity-events.mjs";
 import { redactChildOutput } from "./secret-output.mjs";
@@ -52,6 +52,53 @@ function usage({ input = 0, output = 0, cacheRead = 0, cacheWrite = 0 } = {}) {
   return { input, output, cacheRead, cacheWrite, totalTokens: input + output + cacheRead + cacheWrite, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 }
 
+/** Harnesses whose CLI takes one fixed set of efforts regardless of the model. */
+const STATIC_THINKING_LEVELS = Object.freeze({ antigravity: Object.freeze(["low", "medium", "high"]) });
+/** Offered for a Codex model the native catalog does not describe. */
+const CODEX_FALLBACK_THINKING_LEVELS = Object.freeze(["low", "medium", "high"]);
+const CODEX_KNOWN_THINKING_LEVELS = Object.freeze(["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]);
+const THINKING_LEVEL_HINTS = Object.freeze({
+  amp: "Amp sets its reasoning depth through the mode — use the mode picker instead.",
+  gemini: "Gemini CLI does not expose a thinking level.",
+});
+
+function currentModelRecord(runtime) {
+  const models = Array.isArray(runtime.availableModels) ? runtime.availableModels : [];
+  const id = runtime.selectedModel ?? runtime.model;
+  return id ? models.find((model) => model.id === id) ?? null : models.find((model) => model.isDefault) ?? null;
+}
+
+function thinkingLevelsFor(kind, runtime) {
+  if (STATIC_THINKING_LEVELS[kind]) return [...STATIC_THINKING_LEVELS[kind]];
+  if (kind !== "codex") return [];
+  const record = currentModelRecord(runtime);
+  if (!record) return [...CODEX_FALLBACK_THINKING_LEVELS];
+  return Array.isArray(record.thinkingLevels) ? [...record.thinkingLevels] : [];
+}
+
+function supportsThinkingLevel(kind, runtime, level) {
+  if (kind === "codex" && !currentModelRecord(runtime)) return CODEX_KNOWN_THINKING_LEVELS.includes(level);
+  return thinkingLevelsFor(kind, runtime).includes(level);
+}
+
+/** Explicit selection, else what the last native turn recorded, else the model's own default. */
+function thinkingLevelFor(kind, runtime) {
+  if (runtime.thinkingLevel) return runtime.thinkingLevel;
+  if (kind !== "codex") return null;
+  return runtime.sessionEffort ?? currentModelRecord(runtime)?.defaultThinkingLevel ?? null;
+}
+
+function thinkingLevelsData(kind, runtime) {
+  const levels = thinkingLevelsFor(kind, runtime);
+  const defaultLevel = kind === "codex" ? currentModelRecord(runtime)?.defaultThinkingLevel ?? null : null;
+  return {
+    levels,
+    current: thinkingLevelFor(kind, runtime),
+    ...(defaultLevel && levels.includes(defaultLevel) ? { defaultLevel } : {}),
+    ...(!levels.length ? { hint: THINKING_LEVEL_HINTS[kind] ?? "This model does not have adjustable thinking levels." } : {}),
+  };
+}
+
 function stateFor(runner, runtime, provider) {
   return {
     sessionId: runtime.sessionId ?? runner.sessionId ?? null,
@@ -59,7 +106,7 @@ function stateFor(runner, runtime, provider) {
     sessionFile: null,
     sessionInitialized: runtime.initialized,
     model: (runtime.selectedModel ?? runtime.model) ? { provider: runtime.provider ?? provider, id: runtime.selectedModel ?? runtime.model } : null,
-    thinkingLevel: "off",
+    thinkingLevel: thinkingLevelFor(runtime.kind, runtime),
     messageCount: runtime.messages.length,
     pendingMessageCount: 0,
     isStreaming: runtime.streaming,
@@ -186,12 +233,16 @@ function settleCodex(runtime, extraEvents = []) {
   return [...extraEvents, { type: "agent_end", willRetry: false }, { type: "agent_settled" }];
 }
 
+/** The bridge read the model and effort Codex recorded for the session's latest turn. */
+function decodeCodexSessionModel(runtime, record) {
+  runtime.model = record.model;
+  runtime.selectedModel = null;
+  if ("effort" in record) runtime.sessionEffort = typeof record.effort === "string" && record.effort ? record.effort : null;
+  return [];
+}
+
 function decodeCodex(runtime, record) {
-  if (record.type === "oyster.bridge.session_model" && typeof record.model === "string" && record.model.trim()) {
-    runtime.model = record.model;
-    runtime.selectedModel = null;
-    return [];
-  }
+  if (record.type === "oyster.bridge.session_model" && typeof record.model === "string" && record.model.trim()) return decodeCodexSessionModel(runtime, record);
   if (record.type === "thread.started" && record.thread_id) {
     runtime.sessionId = record.thread_id;
     runtime.initialized = true;
@@ -325,7 +376,10 @@ function routeProviderChanged(runtime, provider) {
 function maybeLoadCodexResumeModel({ kind, runtime, bridgeOptions, env }) {
   if (kind !== "codex" || !runtime.initialized || runtime.model) return;
   const home = bridgeOptions.codexHome || env.CODEX_HOME || process.env.CODEX_HOME || join(homedir(), ".codex");
-  runtime.model = createCodexSessionModelReader(home, runtime.sessionId)();
+  const saved = createCodexSessionStateReader(home, runtime.sessionId)();
+  runtime.model = saved?.model.id ?? null;
+  // Keep a resumed session on the effort its last turn ran with.
+  if (saved?.effort && !runtime.thinkingLevel) runtime.thinkingLevel = saved.effort;
 }
 
 function bridgeConfigFor({ kind, executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode, bridgeOptions, runtime, route }) {
@@ -354,6 +408,12 @@ function parseBridgeRecord(line) {
 }
 
 function modelResponseEvents(runtime, record, kind) {
+  // A thinking-level request that had to load the catalog first: answer with
+  // the fallback levels rather than failing when discovery is unavailable.
+  if (runtime.thinkingLevelRequests?.delete(record.id)) {
+    if (!record.error) runtime.availableModels = Array.isArray(record.models) ? record.models : [];
+    return [response(record.id, "get_available_thinking_levels", thinkingLevelsData(kind, runtime))];
+  }
   if (record.error) return [response(record.id, "get_available_models", null, false, record.error)];
   runtime.availableModels = Array.isArray(record.models) ? record.models : [];
   return [response(record.id, "get_available_models", { models: runtime.availableModels, selectionLabel: kind === "amp" ? "mode" : "model" })];
@@ -388,7 +448,8 @@ function turnExitEvents({ runner, runtime, record, kind, label, id, persistTrans
 
 function appendHeadlessStateChanges({ events, kind, runner, runtime, previous, provider }) {
   if (events.some((event) => event.type === "agent_settled")) runtime.bridgeTurnCompleted = true;
-  if ((!previous.initialized && runtime.initialized) || previous.sessionId !== runtime.sessionId || previous.model !== runtime.model) {
+  if ((!previous.initialized && runtime.initialized) || previous.sessionId !== runtime.sessionId || previous.model !== runtime.model
+    || previous.thinkingLevel !== thinkingLevelFor(kind, runtime)) {
     events.push(response(`_driver-${kind}-state`, "get_state", stateFor(runner, runtime, provider)));
   }
 }
@@ -423,7 +484,7 @@ function canSelectHeadlessModel(runtime, provider, command) {
     && runtime.availableModels?.some((model) => model.provider === (runtime.provider ?? provider) && model.id === command.modelId && !model.disabled);
 }
 
-function sendHeadlessSetModel({ command, runtime, emit, provider, label, id }) {
+function sendHeadlessSetModel({ command, runtime, emit, provider, label, id, kind }) {
   if (runtime.streaming) {
     emit(response(command.id, "set_model", null, false, "Wait for the current turn before changing models"));
     return true;
@@ -434,7 +495,36 @@ function sendHeadlessSetModel({ command, runtime, emit, provider, label, id }) {
   }
   runtime.selectedModel = command.modelId;
   runtime.model = command.modelId;
+  // The previous model's effort may not exist on this one; fall back to its default.
+  runtime.sessionEffort = null;
+  if (runtime.thinkingLevel && !supportsThinkingLevel(kind, runtime, runtime.thinkingLevel)) runtime.thinkingLevel = null;
   emit(response(command.id, "set_model", {}));
+  return true;
+}
+
+function sendHeadlessThinkingLevels({ child, command, runtime, emit, kind }) {
+  if (kind === "codex" && !runtime.availableModels?.length) {
+    (runtime.thinkingLevelRequests ??= new Set()).add(command.id);
+    if (writeBridgeCommand(child, { type: "models", id: command.id })) return true;
+    runtime.thinkingLevelRequests.delete(command.id);
+    return false;
+  }
+  emit(response(command.id, "get_available_thinking_levels", thinkingLevelsData(kind, runtime)));
+  return true;
+}
+
+function sendHeadlessSetThinkingLevel({ command, runtime, emit, label, id, kind }) {
+  const level = typeof command.level === "string" ? command.level.trim() : "";
+  if (!level || !supportsThinkingLevel(kind, runtime, level)) {
+    const reason = thinkingLevelsFor(kind, runtime).length
+      ? `${label ?? id} does not support thinking level ${level || "(empty)"} for this model`
+      : THINKING_LEVEL_HINTS[kind] ?? `${label ?? id} does not have adjustable thinking levels for this model`;
+    emit(response(command.id, "set_thinking_level", null, false, reason));
+    return true;
+  }
+  // Each native turn is a fresh process, so the level applies from the next prompt.
+  runtime.thinkingLevel = level;
+  emit(response(command.id, "set_thinking_level", { level }));
   return true;
 }
 
@@ -446,6 +536,7 @@ function promptPayload({ text, generateSessionId, runtime, kind }) {
     resume: runtime.initialized,
     steer: runtime.streaming,
     model: kind === "amp" ? runtime.selectedModel ?? null : runtime.selectedModel ?? runtime.model,
+    ...(runtime.thinkingLevel ? { effort: runtime.thinkingLevel } : {}),
   };
 }
 
@@ -497,6 +588,8 @@ export function createHeadlessDriver({
   provider = nonEmpty(provider, `${label ?? id} provider`);
   validateHeadlessOptions({ id, label, kind, extraArgs, spawnImpl, env, bridgeOptions });
 
+  const runtimeOf = (runner, defaults) => Object.assign(runtimeFor(runner, defaults), { kind });
+
   function persistTranscript(runner, runtime) {
     // Provisional IDs belong to the runner record only. Wait for the native
     // identity before creating transcript rows, including queued user messages.
@@ -536,7 +629,7 @@ export function createHeadlessDriver({
 
     launch({ runner, cwd, systemPrompt }) {
       const provisionalId = runner.sessionRef?.id ?? runner.sessionId ?? randomUUID();
-      const runtime = runtimeFor(runner, { sessionId: provisionalId, model: defaultModel, systemPrompt });
+      const runtime = runtimeOf(runner, { sessionId: provisionalId, model: defaultModel, systemPrompt });
       runtime.cwd = cwd;
       const route = resolveRoute();
       const nextProvider = route?.provider ?? provider;
@@ -558,12 +651,12 @@ export function createHeadlessDriver({
     decodeLine(runner, line) {
       const record = parseBridgeRecord(line);
       if (!record) return [];
-      const runtime = runtimeFor(runner, { model: defaultModel });
+      const runtime = runtimeOf(runner, { model: defaultModel });
       if (record.type === "oyster.bridge.pong") return [];
       if (record.type === "oyster.bridge.models") return modelResponseEvents(runtime, record, kind);
       if (record.type === "oyster.bridge.turn_start") return turnStartEvents(runtime);
       if (record.type === "oyster.bridge.turn_exit") return turnExitEvents({ runner, runtime, record, kind, label, id, persistTranscript });
-      const previous = { sessionId: runtime.sessionId, model: runtime.model, initialized: runtime.initialized };
+      const previous = { sessionId: runtime.sessionId, model: runtime.model, initialized: runtime.initialized, thinkingLevel: thinkingLevelFor(kind, runtime) };
       const events = decodeHeadlessRecord({ kind, runtime, record });
       appendHeadlessStateChanges({ events, kind, runner, runtime, previous, provider });
       appendHeadlessAuthFailure({ events, kind, runtime, record });
@@ -572,7 +665,7 @@ export function createHeadlessDriver({
     },
 
     sendCommand(runner, child, command) {
-      const runtime = runtimeFor(runner, { model: defaultModel });
+      const runtime = runtimeOf(runner, { model: defaultModel });
       const emit = (event) => queueMicrotask(() => runner.driverEmit?.(event));
       const context = { runner, child, command, runtime, emit, provider, label, id, kind, generateSessionId, persistTranscript };
       const handlers = {
@@ -581,6 +674,8 @@ export function createHeadlessDriver({
         health_probe: () => writeBridgeCommand(child, { type: "health", id: command.id }),
         get_available_models: () => writeBridgeCommand(child, { type: "models", id: command.id }),
         set_model: () => sendHeadlessSetModel(context),
+        get_available_thinking_levels: () => sendHeadlessThinkingLevels(context),
+        set_thinking_level: () => sendHeadlessSetThinkingLevel(context),
         prompt: () => sendHeadlessPrompt(context),
         abort: () => sendHeadlessAbort(context),
         set_session_name: () => sendHeadlessSessionName(context),

@@ -7,7 +7,7 @@ import { createLayoutFeature } from "../layout/createLayoutFeature.js";
 import { createSettingsFeature } from "./createSettingsFeature.js";
 import {
   HEADER_CHOOSE_MODEL_ACTION,
-  HEADER_CYCLE_THINKING_ACTION,
+  HEADER_CHOOSE_THINKING_ACTION,
   HEADER_OPEN_CONFIG_ACTION,
   SETTINGS_CHANGED_ACTION,
   LAYOUT_NAVIGATE_ACTION,
@@ -85,12 +85,12 @@ export function createSettingsLayoutRuntime(deps) {
 
   const headerActions = {
     chooseModel: settings.chooseModel,
-    cycleThinking: settings.cycleThinking,
+    chooseThinking: settings.chooseThinking,
     openConfig: settings.openConfig,
   };
   const detachUiActions = [
     deps.uiActions.register(HEADER_CHOOSE_MODEL_ACTION, headerActions.chooseModel),
-    deps.uiActions.register(HEADER_CYCLE_THINKING_ACTION, headerActions.cycleThinking),
+    deps.uiActions.register(HEADER_CHOOSE_THINKING_ACTION, headerActions.chooseThinking),
     deps.uiActions.register(HEADER_OPEN_CONFIG_ACTION, headerActions.openConfig),
     deps.uiActions.register(SETTINGS_CHANGED_ACTION, settingsChanged),
     deps.uiActions.register(LAYOUT_NAVIGATE_ACTION, (page) => carousel.set(page)),
@@ -98,7 +98,7 @@ export function createSettingsLayoutRuntime(deps) {
 
   const settingsOperations = Object.freeze({
     chooseModel: (...args) => settings.chooseModel(...args),
-    cycleThinking: (...args) => settings.cycleThinking(...args),
+    chooseThinking: (...args) => settings.chooseThinking(...args),
     openConfig: (...args) => settings.openConfig(...args),
   });
   const layoutOperations = Object.freeze({

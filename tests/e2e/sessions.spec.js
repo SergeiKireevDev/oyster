@@ -78,6 +78,32 @@ test("new-session harness selector starts a Claude Code runner", async ({ page }
   await expect(pill).toHaveAttribute("data-harness", "claude-code");
 });
 
+test("Claude Code thinking selector lists the model's effort levels and applies the choice to the live session", async ({ page }) => {
+  await login(page);
+  await newSession(page, { harness: "claude-code" });
+  const chip = page.locator("#thinkChip");
+  // Read from the CLI's effective settings before any prompt is sent.
+  await expect(chip).toContainText("think: medium", { timeout: 15000 });
+  await chip.click();
+  await expect(page.locator("#mTitle")).toHaveText("Select thinking level");
+  await expect(page.locator(".m-option")).toHaveText(["low", "medium", "high"]);
+  await page.locator(".m-option", { hasText: "high" }).click();
+  await expect(chip).toContainText("think: high", { timeout: 15000 });
+  await expect.poll(async () => (await page.evaluate(() => window.rpc({ type: "get_state" }))).thinkingLevel).toBe("high");
+
+  // The choice survives a turn, and a model without effort levels explains itself instead of offering a picker.
+  const prompt = tag("CLAUDE-THINKING");
+  await sendPrompt(page, prompt);
+  await expect(page.locator(".msg.assistant", { hasText: `Mock Claude persisted: ${prompt}` }).last()).toBeVisible();
+  await expect(chip).toContainText("think: high");
+  await modelChip(page, false).click();
+  await page.getByRole("option", { name: "anthropic/haiku — Haiku", exact: true }).click();
+  await expect(chip).toContainText("think: default", { timeout: 15000 });
+  await chip.click();
+  await expect(page.locator(".toast-text", { hasText: "does not have adjustable effort levels" }).first()).toBeVisible();
+  await expect(page.locator(".m-option")).toHaveCount(0);
+});
+
 test("Claude Code model selection uses its native control protocol and persists the chosen model", async ({ page }) => {
   await login(page);
   const runner = await newSession(page, { harness: "claude-code" });
