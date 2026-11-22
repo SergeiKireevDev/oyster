@@ -913,8 +913,27 @@ export function createPiCredentialService({
     });
   }
 
+  /**
+   * Read the live subscription access token for usage polling. Server-only:
+   * the token must never be returned by an HTTP route.
+   */
+  async function readSubscriptionAccess(provider) {
+    if (provider !== ANTHROPIC && provider !== OPENAI_CODEX) return null;
+    const adapter = await load();
+    await prepare(adapter);
+    const credential = await storedCredential(adapter, provider);
+    if (credential?.type === "oauth" && typeof credential.access === "string" && credential.access) {
+      return Object.freeze({ access: credential.access, accountId: typeof credential.accountId === "string" ? credential.accountId : null });
+    }
+    if (provider === ANTHROPIC && claudeOAuthCredentialSink) {
+      const claude = claudeOAuthCredentialSink.read();
+      if (claude?.access) return Object.freeze({ access: claude.access, accountId: null });
+    }
+    return null;
+  }
+
   return Object.freeze({
-    load, listStoredCredentials, listProviders, setApiKey, removeApiKey, loginOAuth, logoutOAuth,
+    load, listStoredCredentials, readSubscriptionAccess, listProviders, setApiKey, removeApiKey, loginOAuth, logoutOAuth,
     rotateAnthropicOAuth, rotateProviderOAuth, syncClaudeOAuth, syncCodexOAuth,
   });
 }

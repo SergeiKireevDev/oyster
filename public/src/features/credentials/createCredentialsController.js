@@ -36,6 +36,7 @@ export function createCredentialsController({
   let providers = [];
   let flow = null;
   let activeRequest = null;
+  let usageRequest = null;
   let pollTimer = null;
   let pollDelay = 500;
   let visible = false;
@@ -126,6 +127,27 @@ export function createCredentialsController({
     }
     stopPolling();
     if (flow?.restart) publish({ lastRestart: flow.restart });
+  }
+
+  // Usage has its own request slot: credential mutations abort `activeRequest`
+  // and must not cancel (or be cancelled by) a slow upstream usage read.
+  async function loadUsage() {
+    if (tornDown || !visible) return null;
+    usageRequest?.abort();
+    const request = new AbortController();
+    usageRequest = request;
+    try {
+      const response = await fetchImpl("/subscription-usage", { signal: request.signal });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !Array.isArray(data.usage)) throw new Error("usage unavailable");
+      const usage = Object.fromEntries(data.usage.filter((entry) => typeof entry?.provider === "string").map((entry) => [entry.provider, entry]));
+      if (usageRequest === request) publish({ usage });
+      return usage;
+    } catch {
+      return null;
+    } finally {
+      if (usageRequest === request) usageRequest = null;
+    }
   }
 
   async function load({ quiet = false } = {}) {
@@ -346,6 +368,8 @@ export function createCredentialsController({
     stopPolling();
     activeRequest?.abort();
     activeRequest = null;
+    usageRequest?.abort();
+    usageRequest = null;
     cancelAbandonedFlow();
     publish({ flow: null });
   }
@@ -356,15 +380,17 @@ export function createCredentialsController({
     stopPolling();
     activeRequest?.abort();
     activeRequest = null;
+    usageRequest?.abort();
+    usageRequest = null;
     cancelAbandonedFlow();
     tornDown = true;
     automaticResponses.clear();
     providers = [];
-    setState({ providers: [], flow: null, setupMode: false, loading: false, error: "", lastRestart: null });
+    setState({ providers: [], usage: {}, flow: null, setupMode: false, loading: false, error: "", lastRestart: null });
   }
 
   return Object.freeze({
-    load, save, remove,
+    load, loadUsage, save, remove,
     startOAuth, poll, respondOAuth, cancelOAuth, logoutOAuth,
     activate, deactivate, teardown,
   });

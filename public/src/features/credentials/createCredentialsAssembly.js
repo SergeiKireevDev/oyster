@@ -30,7 +30,11 @@ export function createCredentialsAssembly({
     setState({ setupMode: false, targetHarness: harness });
     controller.activate();
     openModal({ title: "Credentials", wide: true, content: "credentials" });
-    return controller.load();
+    return Promise.resolve(controller.load()).then((providers) => {
+      // Usage is polled only while the modal is open; the server caches it.
+      void controller.loadUsage?.();
+      return providers;
+    });
   };
   const completeSetup = () => {
     if (!setupModalOpen || tornDown) return;
