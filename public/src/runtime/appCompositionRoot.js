@@ -984,9 +984,13 @@ const threadsAssembly = createThreadsAssembly({
   setAfterTranscript: transcriptOperations.setAfterTranscript,
   // A runner the server just named is switched to directly. Otherwise the session is reopened by
   // key: the server uses the session's own folder, but the route still expects one to be named.
-  openSession: ({ sessionKey, runnerId = null }) => runnerId
-    ? getSessionRuntime().switchRunner(runnerId)
-    : getSessionRuntime().openAndSwitchSession({ sessionKey, dir: getWorkdir() }),
+  openSession: async ({ sessionKey, runnerId = null }) => {
+    if (runnerId) getSessionRuntime().switchRunner(runnerId);
+    else await getSessionRuntime().openAndSwitchSession({ sessionKey, dir: getWorkdir() });
+    // Opening a thread (or returning to its parent) is reading it: clear its unread result,
+    // exactly as choosing a session from the list does.
+    await acknowledgeCurrentAttention();
+  },
   focusComposer: () => input.focus(),
   restoreComposerText: (text) => composerOperations.insertText(text),
   getFamily: () => get(threadFamily),
