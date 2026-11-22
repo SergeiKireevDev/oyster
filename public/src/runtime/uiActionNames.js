@@ -84,6 +84,6 @@ export const SESSION_SIDEBAR_CREATE_IN_CWD_ACTION = "sessionSidebar.createInCwd"
 export const SESSION_SIDEBAR_CREATE_IN_FOLDER_ACTION = "sessionSidebar.createInFolder";
 
 export const HEADER_CHOOSE_MODEL_ACTION = "header.chooseModel";
-export const HEADER_CYCLE_THINKING_ACTION = "header.cycleThinking";
+export const HEADER_CHOOSE_THINKING_ACTION = "header.chooseThinking";
 export const HEADER_OPEN_CONFIG_ACTION = "header.openConfig";
 export const SETTINGS_CHANGED_ACTION = "settings.changed";

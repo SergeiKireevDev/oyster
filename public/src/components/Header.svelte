@@ -6,7 +6,7 @@
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
     HEADER_CHOOSE_MODEL_ACTION,
-    HEADER_CYCLE_THINKING_ACTION,
+    HEADER_CHOOSE_THINKING_ACTION,
     HEADER_OPEN_CONFIG_ACTION,
   } from "../runtime/uiActionNames.js";
 
@@ -20,8 +20,8 @@
     uiActions.invoke(HEADER_CHOOSE_MODEL_ACTION);
   }
 
-  function cycleThinking() {
-    uiActions.invoke(HEADER_CYCLE_THINKING_ACTION);
+  function chooseThinking() {
+    uiActions.invoke(HEADER_CHOOSE_THINKING_ACTION);
   }
 
   /**
@@ -73,9 +73,9 @@
       class="chip"
       id="thinkChip"
       type="button"
-      aria-label={`Cycle thinking level. Current level: ${$appHeader.thinkChip}`}
-      title="Cycle thinking level"
-      onclick={cycleThinking}
+      aria-label={`Change thinking level. Current level: ${$appHeader.thinkChip}`}
+      title="Change thinking level"
+      onclick={chooseThinking}
     >
       <AppIcon name="thinking" size={15} />
       <span>{$appHeader.thinkChip}</span>

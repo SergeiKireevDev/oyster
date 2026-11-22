@@ -65,6 +65,18 @@ async function codexAccountMayExist(rpc) {
   }
 }
 
+/** Reasoning efforts Codex advertises for one catalog model, in the catalog's own order. */
+function codexThinkingLevels(model) {
+  const levels = (Array.isArray(model.supportedReasoningEfforts) ? model.supportedReasoningEfforts : [])
+    .map((entry) => typeof entry === "string" ? entry : entry?.reasoningEffort)
+    .filter((level, index, all) => typeof level === "string" && level && all.indexOf(level) === index);
+  return {
+    ...(levels.length ? { thinkingLevels: levels } : {}),
+    ...(typeof model.defaultReasoningEffort === "string" && model.defaultReasoningEffort ? { defaultThinkingLevel: model.defaultReasoningEffort } : {}),
+    ...(model.isDefault === true ? { isDefault: true } : {}),
+  };
+}
+
 export function discoverCodexModels(options) {
   return withNativeRpc({ ...options, args: ["app-server", "--stdio", ...(options.provider === "openrouter" ? CODEX_OPENROUTER_ARGS : [])] }, async (rpc, notify) => {
     await rpc("initialize", { clientInfo: { name: "oyster", version: "1.0.0" } });
@@ -79,7 +91,10 @@ export function discoverCodexModels(options) {
       const page = await rpc("model/list", { cursor, limit: 100 });
       for (const model of page.data ?? []) {
         if (model.hidden || !model.model || models.some((item) => item.id === model.model)) continue;
-        models.push({ provider: options.provider === "openrouter" ? "openrouter" : "openai", id: model.model, name: model.displayName ?? model.model });
+        models.push({
+          provider: options.provider === "openrouter" ? "openrouter" : "openai", id: model.model, name: model.displayName ?? model.model,
+          ...codexThinkingLevels(model),
+        });
       }
       cursor = page.nextCursor ?? null;
       if (cursor && cursors.has(cursor)) throw new Error("Codex model catalog repeated a page");

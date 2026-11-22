@@ -34,21 +34,40 @@ export function createSettingsController({ rpc, pickOption, refreshState, toast,
       await refreshState();
     } catch (error) { toast(error.message, "error"); }
   }
-  async function cycleThinking() {
+  // Every harness answers the same two commands: the levels its current model
+  // supports (optionally with the active and default ones), then the selection.
+  async function chooseThinking() {
     try {
-      const data = await rpc({ type: "cycle_thinking_level" });
-      if (data) toast(`thinking: ${data.level}`);
-      refreshState();
+      const runnerId = getRunnerId();
+      const { levels = [], current, defaultLevel, hint } = await rpc({ type: "get_available_thinking_levels" }) ?? {};
+      if (runnerId !== getRunnerId()) return;
+      const active = current ?? getState?.()?.thinkingLevel ?? null;
+      if (!levels.length) {
+        toast(hint ?? "Thinking level is not adjustable for this model.");
+        return;
+      }
+      if (levels.length === 1 && levels[0] === active) {
+        toast(`Thinking level is fixed at ${active} for this model.`);
+        return;
+      }
+      const labels = levels.map((level) => level === defaultLevel ? `${level} — default` : level);
+      const choice = await pickOption("Select thinking level", labels, { selected: levels.indexOf(active) });
+      if (choice == null || runnerId !== getRunnerId()) return;
+      const level = levels[choice];
+      if (level === active) return;
+      await rpc({ type: "set_thinking_level", level });
+      toast(`thinking: ${level}`);
+      await refreshState();
     } catch (error) { toast(error.message, "error"); }
   }
   async function openConfig() {
     const state = getState?.() ?? {};
     const choice = await pickOption("Settings", [
       `Model: ${state.model?.id ?? "?"} — change…`,
-      `Thinking: ${state.thinkingLevel ?? "?"} — cycle`,
+      `Thinking: ${state.thinkingLevel ?? "default"} — change…`,
     ]);
     if (choice === 0) return chooseModel();
-    if (choice === 1) return cycleThinking();
+    if (choice === 1) return chooseThinking();
   }
-  return { chooseModel, cycleThinking, openConfig };
+  return { chooseModel, chooseThinking, openConfig };
 }

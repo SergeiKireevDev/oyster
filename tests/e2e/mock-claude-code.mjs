@@ -12,6 +12,10 @@ const option = (name) => {
 };
 const sessionId = option("--session-id") ?? option("--resume") ?? randomUUID();
 let model = option("--model") ?? "sonnet";
+const effortLevels = ["low", "medium", "high"];
+let effort = option("--effort") ?? "medium";
+// Like the real CLI, a model without effort support reports no applied effort.
+const supportsEffort = (value) => value !== "haiku";
 const configDir = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
 const projectDir = join(configDir, "projects", "-workspace");
 const transcriptPath = join(projectDir, `${sessionId}.jsonl`);
@@ -47,6 +51,7 @@ for await (const line of createInterface({ input: process.stdin, crlfDelay: Infi
               value,
               resolvedModel: value === "default" ? "sonnet" : value,
               displayName: value === "default" ? "Default (recommended)" : `${value[0].toUpperCase()}${value.slice(1)}`,
+              ...(supportsEffort(value) ? { supportsEffort: true, supportedEffortLevels: effortLevels } : {}),
             })),
             {
               value: "cc-update-required-1",
@@ -59,6 +64,18 @@ for await (const line of createInterface({ input: process.stdin, crlfDelay: Infi
         },
       },
     });
+    continue;
+  }
+  if (input.type === "control_request" && input.request?.subtype === "get_settings") {
+    emit({ type: "control_response", response: { subtype: "success", request_id: input.request_id, response: {
+      effective: {}, sources: [], applied: { model, effort: supportsEffort(model) ? effort : null },
+    } } });
+    continue;
+  }
+  if (input.type === "control_request" && input.request?.subtype === "apply_flag_settings") {
+    const requested = input.request.settings?.effortLevel;
+    if (effortLevels.includes(requested)) effort = requested;
+    emit({ type: "control_response", response: { subtype: "success", request_id: input.request_id } });
     continue;
   }
   if (input.type === "control_request" && input.request?.subtype === "set_model") {

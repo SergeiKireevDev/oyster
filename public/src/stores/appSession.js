@@ -19,7 +19,7 @@ export const appHeader = derived(appSession, ($appSession) => {
   const state = $appSession.state;
   const model = state?.model;
   const modelId = model?.id ?? "no model";
-  const thinking = state?.thinkingLevel ?? "think";
+  const thinking = state?.thinkingLevel ?? "default";
   const workdir = $appSession.workdir ?? "";
   return {
     connectionClass: $appSession.connected ? `dot ${$appSession.busy ? "busy" : "ok"}` : "dot",

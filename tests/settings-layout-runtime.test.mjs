@@ -5,7 +5,7 @@ import { createSettingsLayoutRuntime } from "../public/src/features/settings/cre
 import { createUiActionRegistry } from "../public/src/runtime/uiActionRegistry.js";
 import {
   HEADER_CHOOSE_MODEL_ACTION,
-  HEADER_CYCLE_THINKING_ACTION,
+  HEADER_CHOOSE_THINKING_ACTION,
   HEADER_OPEN_CONFIG_ACTION,
   SETTINGS_CHANGED_ACTION,
   LAYOUT_NAVIGATE_ACTION,
@@ -31,7 +31,7 @@ function mount(listeners, uiActions = createUiActionRegistry()) {
 
 test("settings/layout runtime exposes narrow settings and layout operations", () => {
   const runtime = mount([]);
-  assert.deepEqual(Object.keys(runtime.settings).sort(), ["chooseModel", "cycleThinking", "openConfig"]);
+  assert.deepEqual(Object.keys(runtime.settings).sort(), ["chooseModel", "chooseThinking", "openConfig"]);
   assert.deepEqual(Object.keys(runtime.layout).sort(), ["apply", "reset"]);
   assert.equal(typeof runtime.handleExtensionUI, "function");
   assert.equal(typeof runtime.attach, "function");
@@ -50,7 +50,7 @@ test("settings/layout runtime registers header and settings-change actions until
   const runtime = mount([], uiActions);
   assert.deepEqual([...registered.keys()].sort(), [
     HEADER_CHOOSE_MODEL_ACTION,
-    HEADER_CYCLE_THINKING_ACTION,
+    HEADER_CHOOSE_THINKING_ACTION,
     HEADER_OPEN_CONFIG_ACTION,
     SETTINGS_CHANGED_ACTION,
     LAYOUT_NAVIGATE_ACTION,
@@ -65,7 +65,7 @@ test("header routes scoped actions and settings delegates persistence to its pre
   const settings = readFileSync(new URL("../public/src/components/SettingsModal.svelte", import.meta.url), "utf8");
   for (const name of [
     "HEADER_CHOOSE_MODEL_ACTION",
-    "HEADER_CYCLE_THINKING_ACTION",
+    "HEADER_CHOOSE_THINKING_ACTION",
     "HEADER_OPEN_CONFIG_ACTION",
   ]) {
     assert.match(header, new RegExp(`uiActions\\.invoke\\(${name}`));

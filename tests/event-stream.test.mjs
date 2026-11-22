@@ -98,6 +98,11 @@ test("event lifecycle logging classification excludes noisy updates", () => {
 test("state refresh command classification excludes ordinary responses", () => {
   assert.equal(stateRefreshRequired("set_model"), true);
   assert.equal(stateRefreshRequired("get_messages"), false);
+  assert.equal(stateRefreshRequired("set_thinking_level"), true);
+  assert.equal(stateRefreshRequired("get_state", "rpc-12"), false, "the browser's own state reads must not loop");
+  assert.equal(stateRefreshRequired("get_state", "_driver-claude-settings"), true);
+  assert.equal(stateRefreshRequired("get_state", "_driver-codex-state"), true);
+  assert.equal(stateRefreshRequired("get_state", "_driver-codex-saved"), false);
 });
 
 test("replay event gate buffers only events that arrive after replay completion", () => {

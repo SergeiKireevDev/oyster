@@ -26,7 +26,11 @@ function codexSessionMetadataFromRecord(record) {
   const model = record.type === "turn_context" && typeof record.payload?.model === "string"
     ? record.payload.model.trim()
     : "";
-  return { provider, model };
+  // An absent or null effort means the turn ran at the model's default.
+  const effort = record.type === "turn_context" && typeof record.payload?.effort === "string"
+    ? record.payload.effort.trim()
+    : "";
+  return { provider, model, effort, turn: record.type === "turn_context" };
 }
 
 function parseCodexRolloutLine(line) {
@@ -34,13 +38,14 @@ function parseCodexRolloutLine(line) {
   catch { return null; }
 }
 
-// exec --json omits the model; Codex records the resolved model in each
+// exec --json omits the model and reasoning effort; Codex records both in each
 // rollout's turn_context. Read only appended bytes, including partial writes.
 export function createCodexSessionStateReader(home, sessionId) {
   let path = null;
   let offset = 0;
   let pending = "";
   let model = null;
+  let effort = null;
   let provider = "openai";
   let decoder = new StringDecoder("utf8");
   return () => {
@@ -50,7 +55,7 @@ export function createCodexSessionStateReader(home, sessionId) {
     let fd;
     try {
       fd = openSync(path, "r");
-      if (fstatSync(fd).size < offset) { offset = 0; pending = ""; model = null; decoder = new StringDecoder("utf8"); }
+      if (fstatSync(fd).size < offset) { offset = 0; pending = ""; model = null; effort = null; decoder = new StringDecoder("utf8"); }
       const buffer = Buffer.alloc(SESSION_MODEL_READ_KIBIBYTES * BYTES_PER_KIBIBYTE);
       let count;
       while ((count = readSync(fd, buffer, 0, buffer.length, offset)) > 0) {
@@ -63,11 +68,12 @@ export function createCodexSessionStateReader(home, sessionId) {
           const metadata = parseCodexRolloutLine(line);
           if (metadata?.provider) provider = metadata.provider;
           if (metadata?.model) model = metadata.model;
+          if (metadata?.turn) effort = metadata.effort || null;
         }
       }
     } catch { /* Metadata may not exist yet; never interrupt the turn. */ }
     finally { if (fd !== undefined) closeSync(fd); }
-    return model ? { model: { provider, id: model } } : null;
+    return model ? { model: { provider, id: model }, effort } : null;
   };
 }
 

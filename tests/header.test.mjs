@@ -10,7 +10,7 @@ test("Header exposes descriptive session-control names and button semantics", ()
   assert.equal((source.match(/<button/g) ?? []).length, (source.match(/<button[^>]*type="button"/g) ?? []).length);
   assert.match(source, /aria-label=\{`Configure model and thinking level: \$\{\$appHeader\.cfgChip\}`\}/);
   assert.match(source, /aria-label=\{`Change model\. Current model: \$\{\$appHeader\.modelChip\}`\}/);
-  assert.match(source, /aria-label=\{`Cycle thinking level\. Current level: \$\{\$appHeader\.thinkChip\}`\}/);
+  assert.match(source, /aria-label=\{`Change thinking level\. Current level: \$\{\$appHeader\.thinkChip\}`\}/);
 });
 
 test("Header menu trigger communicates popup state", () => {
@@ -22,7 +22,7 @@ test("Header menu trigger communicates popup state", () => {
 });
 
 test("Header uses named handlers and does not forward unused DOM events", () => {
-  for (const handler of ["openConfig", "chooseModel", "cycleThinking", "toggleMenu"]) {
+  for (const handler of ["openConfig", "chooseModel", "chooseThinking", "toggleMenu"]) {
     assert.match(source, new RegExp(`onclick=\\{${handler}\\}`));
   }
   assert.doesNotMatch(source, /onclick=\{\([^)]*\) =>/);
