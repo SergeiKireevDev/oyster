@@ -310,7 +310,11 @@
         || (currentRootSessionKey !== null && sessionKey === currentRootSessionKey),
       alive: Boolean(runner?.alive) || threads.busy,
       busy: Boolean(runner?.busy) || threads.busy,
-      unread: threads.unread,
+      // The session's own unopened result, or one waiting in a thread under it.
+      unread: Boolean(runner?.attentionUnread) || threads.unread,
+      unreadLabel: runner?.attentionUnread
+        ? (runner.attentionStatus === "clarification" ? "Waiting for your answer" : "New reply, not opened yet")
+        : "A thread has a new reply",
     };
   }
   const sessionGroups = $derived(partitionSessionGroupsByArchive(
@@ -623,7 +627,7 @@
       <span class="session-sidebar-copy">
         <span class="session-sidebar-titleline">
           <span class="session-sidebar-name">{label(session, runner)}</span>
-          {#if presence.unread}<span class="session-thread-unread" role="img" aria-label="A thread has a new reply" title="A thread has a new reply"></span>{/if}
+          {#if presence.unread}<span class="session-thread-unread" role="img" aria-label={presence.unreadLabel} title={presence.unreadLabel}></span>{/if}
           <HarnessPill harness={sessionHarness(session, runner)} />
         </span>
         {#if meta}
