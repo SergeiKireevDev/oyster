@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # onnxruntime-node bundles its CPU binaries; its optional CUDA download now 404s.
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

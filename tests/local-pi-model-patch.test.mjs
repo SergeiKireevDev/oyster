@@ -5,7 +5,7 @@ import { stripTypeScriptTypes } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { patchFireworksProvider, patchLocalPiModels } from "../scripts/patch-local-pi-models.mjs";
+import { patchFireworksProvider, patchLocalPiModels, patchOpencodeGoApis } from "../scripts/patch-local-pi-models.mjs";
 
 const fixture = `function models(data: Record<string, any>) {
   let selected = null;
@@ -86,20 +86,51 @@ test("compatibility CLI patches both files idempotently and validates before wri
   const providerPath = join(root, "fireworks.ts");
   const cli = new URL("../scripts/patch-local-pi-models.mjs", import.meta.url).pathname;
   const run = (...args) => spawnSync(process.execPath, [cli, ...args], { encoding: "utf8" });
-  writeFileSync(generatorPath, fixture);
+  const generatorFixture = `${fixture}\n${opencodeFixture}`;
+  writeFileSync(generatorPath, generatorFixture);
   writeFileSync(providerPath, "unexpected provider");
   const invalid = run(generatorPath, providerPath);
   assert.equal(invalid.status, 1);
   assert.match(invalid.stderr, /Unsupported pi Fireworks provider/);
-  assert.equal(readFileSync(generatorPath, "utf8"), fixture, "failed validation leaves the generator untouched");
+  assert.equal(readFileSync(generatorPath, "utf8"), generatorFixture, "failed validation leaves the generator untouched");
   assert.equal(readFileSync(providerPath, "utf8"), "unexpected provider");
 
   writeFileSync(providerPath, fireworksFixture);
   for (let attempt = 0; attempt < 2; attempt++) {
     const result = run(generatorPath, providerPath);
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(readFileSync(generatorPath, "utf8"), patchLocalPiModels(fixture));
+    assert.equal(readFileSync(generatorPath, "utf8"), patchOpencodeGoApis(patchLocalPiModels(generatorFixture)));
     assert.equal(readFileSync(providerPath, "utf8"), patchFireworksProvider(fireworksFixture));
   }
   assert.equal(run(generatorPath).status, 1, "both source paths are required");
+});
+
+const opencodeFixture = `function models(entries: [string, string, string][]) {
+  const models = [];
+  for (const [provider, modelId, api] of entries) {
+    const variant = { provider };
+\t\t\t\tif (variant.provider === "opencode" && modelId === "grok-build-0.1") {
+    }
+    models.push({ provider, modelId, api });
+  }
+  return models;
+}`;
+
+test("OpenCode Go patch drops only Google-API models from the Go provider", () => {
+  const patched = patchOpencodeGoApis(opencodeFixture);
+  const select = new Function(`${stripTypeScriptTypes(patched)}; return models;`)();
+  const kept = select([
+    ["opencode-go", "gemini-4-argon", "google-generative-ai"],
+    ["opencode-go", "kimi-k2.6", "anthropic-messages"],
+    ["opencode", "gemini-4-argon", "google-generative-ai"],
+  ]);
+  assert.deepEqual(kept.map((m) => `${m.provider}:${m.modelId}`), ["opencode-go:kimi-k2.6", "opencode:gemini-4-argon"]);
+  assert.equal(patchOpencodeGoApis(patched), patched);
+});
+
+test("OpenCode Go patch refuses missing, duplicated, or mixed source patterns", () => {
+  const patched = patchOpencodeGoApis(opencodeFixture);
+  for (const input of ["unrelated generator", opencodeFixture + opencodeFixture, patched + opencodeFixture]) {
+    assert.throws(() => patchOpencodeGoApis(input), /OpenCode Go API compatibility/);
+  }
 });
