@@ -3,6 +3,7 @@
  * Compatibility patches for the pinned pi build and changing model catalogs:
  * - Keep api.kimi.com paired with the renamed CN catalog, not another region.
  * - Declare Fireworks' supported APIs independently of the generated models.
+ * - Skip OpenCode Go catalog models whose API that provider does not serve.
  * Applied before bundled pi builds and inside Docker build copies.
  * Remove each patch once the pinned pi source incorporates its fix.
  */
@@ -24,6 +25,20 @@ export function patchLocalPiModels(source) {
   return source.replace(BEFORE, AFTER);
 }
 
+const OPENCODE_GO_BEFORE = `\t\t\t\tif (variant.provider === "opencode" && modelId === "grok-build-0.1") {`;
+const OPENCODE_GO_AFTER = `\t\t\t\t// The OpenCode Go provider registers no Google stream; skip such catalog entries.
+\t\t\t\tif (variant.provider === "opencode-go" && api === "google-generative-ai") continue;
+
+${OPENCODE_GO_BEFORE}`;
+
+export function patchOpencodeGoApis(source) {
+  if (source.includes(OPENCODE_GO_AFTER) && source.split(OPENCODE_GO_BEFORE).length === 2) return source;
+  if (source.split(OPENCODE_GO_BEFORE).length !== 2 || source.includes(OPENCODE_GO_AFTER)) {
+    throw new Error("Unsupported pi model generator: review the OpenCode Go API compatibility patch before building");
+  }
+  return source.replace(OPENCODE_GO_BEFORE, OPENCODE_GO_AFTER);
+}
+
 const FIREWORKS_BEFORE = `export function fireworksProvider(): Provider<"anthropic-messages" | "openai-completions"> {
 \treturn createProvider({`;
 const FIREWORKS_AFTER = `export function fireworksProvider(): Provider<"anthropic-messages" | "openai-completions"> {
@@ -41,7 +56,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     if (process.argv.length !== 4) throw new Error("Usage: patch-local-pi-models.mjs GENERATOR_PATH FIREWORKS_PROVIDER_PATH");
     // Validate both inputs before writing either, so source drift fails closed.
-    const patches = [patchLocalPiModels, patchFireworksProvider].map((patch, index) => {
+    const patchGenerator = (source) => patchOpencodeGoApis(patchLocalPiModels(source));
+    const patches = [patchGenerator, patchFireworksProvider].map((patch, index) => {
       const path = process.argv[index + 2];
       const source = readFileSync(path, "utf8");
       return { path, source, patched: patch(source) };
@@ -49,7 +65,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     for (const { path, source, patched } of patches) {
       if (patched !== source) writeFileSync(path, patched);
     }
-    console.log("Kimi catalog and Fireworks API compatibility patches ready");
+    console.log("Kimi catalog, OpenCode Go API, and Fireworks API compatibility patches ready");
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

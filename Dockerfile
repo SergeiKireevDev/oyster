@@ -75,6 +75,8 @@ RUN curl -fsSL -o /usr/local/bin/cloudflared \
 COPY --from=pi-builder /opt/pi /opt/pi
 
 WORKDIR /app
+# onnxruntime-node bundles its CPU binaries; its optional CUDA download now 404s.
+ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
 
 # Frontend build dependencies + app sources (see .dockerignore)
 COPY package.json package-lock.json vite.config.js README.md AGENTS.md oyster.service Dockerfile Dockerfile.local-pi ./
