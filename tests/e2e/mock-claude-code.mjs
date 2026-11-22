@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, appendFile } from "node:fs/promises";
+import { mkdir, readFile, appendFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -20,6 +20,19 @@ const configDir = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
 const projectDir = join(configDir, "projects", "-workspace");
 const transcriptPath = join(projectDir, `${sessionId}.jsonl`);
 await mkdir(projectDir, { recursive: true });
+
+// `--resume <source> --fork-session --session-id <new>`: like the real CLI, a fork
+// starts as a copy of its source transcript (same record ids) under the new id.
+const forkSource = args.includes("--fork-session") ? option("--resume") : null;
+if (forkSource && forkSource !== sessionId) {
+  try {
+    const source = await readFile(join(projectDir, `${forkSource}.jsonl`), "utf8");
+    const copied = source.trim().split("\n").filter(Boolean).map((line) => JSON.stringify({ ...JSON.parse(line), sessionId }));
+    await writeFile(transcriptPath, `${copied.join("\n")}\n`, { flag: "wx" });
+  } catch (error) {
+    if (error?.code !== "ENOENT" && error?.code !== "EEXIST") throw error;
+  }
+}
 
 let parentUuid = null;
 try {

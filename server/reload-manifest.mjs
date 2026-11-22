@@ -87,6 +87,7 @@ const manifest = createReloadManifest({
     "session-references.mjs",
     "sessions.mjs",
     "session-titles.mjs",
+    "threads.mjs",
     "tunnels.mjs",
   ],
   http: [
@@ -102,6 +103,7 @@ const manifest = createReloadManifest({
     "http/routes/runnerRoutes.mjs",
     "http/routes/sessionRoutes.mjs",
     "http/routes/staticRoutes.mjs",
+    "http/routes/threadRoutes.mjs",
     "http/routes/tunnelRoutes.mjs",
     "http/routes/workdirRoutes.mjs",
   ],

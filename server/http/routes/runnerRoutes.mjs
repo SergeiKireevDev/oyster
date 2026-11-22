@@ -239,6 +239,15 @@ export function createRunnerRoutes({
 
   const { json, readJsonBody, resolveSafePath } = requestContext;
 
+  function runnerHolds(sessionRef) {
+    const equals = state.sessionReferences?.equals;
+    if (typeof equals !== "function") return false;
+    for (const runner of state.runners.values()) {
+      if (runner.sessionRef && equals(runner.sessionRef, sessionRef)) return true;
+    }
+    return false;
+  }
+
   function validateOpenSessionBody(body) {
     if (!isJsonObject(body)) return "request body must be a JSON object";
     for (const key of ["sessionKey", "sessionPath", "dir", "harness"]) {
@@ -256,7 +265,8 @@ export function createRunnerRoutes({
     const sessionRef = requestedSession !== undefined ? sessionReferenceParam(body) : null;
     if (requestedSession && !sessionRef) return { error: `not a session reference: ${requestedSession}`, status: 400 };
     const persistedSession = sessionRef ? await lookupSessionReference(sessionRef) : null;
-    if (sessionRef && sessionRef.storagePath !== null && !persistedSession) return { error: `session not found: ${sessionRef.id}`, status: 404 };
+    // A session a runner already holds may not be saved yet (a thread forking on its first launch).
+    if (sessionRef && sessionRef.storagePath !== null && !persistedSession && !runnerHolds(sessionRef)) return { error: `session not found: ${sessionRef.id}`, status: 404 };
     return { sessionRef, persistedSession };
   }
 

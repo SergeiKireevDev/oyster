@@ -22,6 +22,7 @@ test("every imperative browser or element listener module includes a cleanup pat
 
   assert.deepEqual(listenerOwners.map(({ path }) => path), [
     "features/cloud/cloudBrowser.js",
+    "features/threads/createThreadsAssembly.js",
     "lib/blockingSurface.js",
     "lib/commandController.js",
     "lib/fileExplorerController.js",

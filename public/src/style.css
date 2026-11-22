@@ -531,6 +531,14 @@
   }
   .msg-flash.fading { outline-color: transparent; }
 
+  /* Passages a reply's threads quote (CSS Custom Highlight API; see lib/threadQuoteHighlights.js). */
+  ::highlight(thread-quote) {
+    background-color: color-mix(in srgb, var(--accent) 22%, transparent);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--accent) 70%, transparent);
+    text-underline-offset: 3px;
+  }
+
   /* toast */
   .toast-stack {
     position: fixed;

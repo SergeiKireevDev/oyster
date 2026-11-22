@@ -1,9 +1,11 @@
 <script>
   import { onDestroy } from "svelte";
   import FolderIcon from "./FolderIcon.svelte";
+  import AppIcon from "./AppIcon.svelte";
   import { appHeader } from "../stores/appSession.js";
   import { composerText, composerUi, composerVoice } from "../stores/composer.js";
   import { headerState } from "../stores/header.js";
+  import { threadDraft, threadView } from "../stores/threads.js";
   import { composerHighlightSegments } from "../lib/composerHighlight.js";
   import { createFrameScheduler } from "../lib/frameScheduler.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
@@ -13,6 +15,7 @@
     COMPOSER_KEYDOWN_ACTION,
     COMPOSER_SEND_ACTION,
     COMPOSER_VOICE_ACTION,
+    THREAD_TREE_OPEN_ACTION,
   } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
@@ -59,6 +62,14 @@
     uiActions.invoke(COMPOSER_VOICE_ACTION);
   }
 
+  function openThreadTree() {
+    uiActions.invoke(THREAD_TREE_OPEN_ACTION);
+  }
+
+  function threadTreeTitle(count) {
+    return `Show the thread tree (${count} thread${count === 1 ? "" : "s"})`;
+  }
+
   function highlightSegmentKey(segment, index) {
     // Highlight segments are ordered text ranges and never reorder. Combining
     // their position and role preserves unaffected DOM nodes as the draft grows.
@@ -89,6 +100,9 @@
   $: voiceButtonLabel = voiceLabel($composerVoice);
   $: voiceButtonTitle = voiceTitle($composerVoice);
   $: voiceButtonDisabled = $composerVoice.transcribing || voiceIsStarting($composerVoice);
+  $: threadCount = $threadView.threads.length;
+  $: threadTreeLabel = threadTreeTitle(threadCount);
+  $: placeholder = $threadDraft ? "Ask about the quoted passage…" : $composerUi.placeholder;
 </script>
 
 <div id="composer">
@@ -101,13 +115,19 @@
         aria-label="Message"
         rows="1"
         enterkeyhint="send"
-        placeholder={$composerUi.placeholder}
+        {placeholder}
         disabled={$composerUi.inputDisabled}
         oninput={handleInput}
         onscroll={handleScroll}
         onkeydown={handleKeydown}
       ></textarea>
     </div>
+    {#if threadCount}
+      <button class="thread-tree-btn" id="threadTreeBtn" type="button" aria-label={threadTreeLabel} title={threadTreeLabel} onclick={openThreadTree}>
+        <AppIcon name="fork" size={19} />
+        <span class="thread-tree-count" aria-hidden="true">{threadCount}</span>
+      </button>
+    {/if}
     {#if $composerVoice.available}
       <button
         class:recording={$composerVoice.listening}
@@ -260,6 +280,40 @@
     opacity: .45;
   }
 
+  .thread-tree-btn {
+    position: relative;
+    display: grid;
+    width: 40px;
+    height: 40px;
+    flex: none;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color .15s, background .15s;
+  }
+  .thread-tree-btn:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+  }
+  .thread-tree-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .thread-tree-count {
+    position: absolute;
+    top: 3px;
+    right: 1px;
+    min-width: 15px;
+    padding: 1px 4px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--bg);
+    font: 700 9.5px/1.3 inherit;
+    text-align: center;
+  }
   .voice-btn {
     display: grid;
     width: 40px;

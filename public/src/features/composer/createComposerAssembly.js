@@ -106,6 +106,11 @@ export function createComposerAssembly(deps) {
     if (!text || !deps.composerReadyForSend()) return;
     const confirmKnownCommand = commandRuntime?.guard.confirmKnownCommand ?? deps.confirmKnownCommand ?? (async () => true);
     if (!await confirmKnownCommand(text)) return;
+    // A feature may claim the message (a drafted thread sends it as its question).
+    if (deps.interceptSend?.(text)) {
+      setText("");
+      return;
+    }
     input.value = "";
     deps.setTextValue("");
     input.style.height = "auto";

@@ -55,7 +55,7 @@ test("a completed native process exiting cannot settle a newly queued Antigravit
 test("Antigravity is opt-in in the configured registry", () => {
   const config = { PI_BIN: "/opt/pi", PI_EXTRA_ARGS: [], ANTIGRAVITY_BIN: "/opt/agy", ANTIGRAVITY_ARGS: [] };
   const registry = createConfiguredRunnerDrivers({ config, piProcesses: { launch() {} } });
-  assert.deepEqual(registry.list().at(-1), { id: "antigravity", label: "Antigravity CLI" });
+  assert.deepEqual(registry.list().at(-1), { id: "antigravity", label: "Antigravity CLI", threadFork: null });
 });
 
 test("Antigravity bridge uses documented flags, inherited MCP identity, and native model discovery", async (t) => {

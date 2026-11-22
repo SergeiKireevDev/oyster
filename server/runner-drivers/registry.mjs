@@ -42,6 +42,8 @@ export function createRunnerDriverRegistry({ drivers, defaultId = "pi" } = {}) {
     list: () => [...byId.values()].map((driver) => Object.freeze({
       id: driver.id,
       label: driver.label ?? driver.id,
+      // "entry": can fork at any message; "tip": only from the end of the session; null: cannot fork.
+      threadFork: driver.threadFork ?? null,
     })),
   });
 }

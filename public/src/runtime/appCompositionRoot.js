@@ -39,6 +39,9 @@ import { resetRoutineManager, updateRoutineManager } from "../stores/routineMana
 import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 import { addToast } from "../stores/toasts.js";
 import { createComposerAssembly } from "../features/composer/createComposerAssembly.js";
+import { createThreadsAssembly } from "../features/threads/createThreadsAssembly.js";
+import { runnerRootSessionKey } from "../features/threads/threadModel.js";
+import { setThreadFamily, threadDraft, threadFamily, threadPending } from "../stores/threads.js";
 import { createCredentialsAssembly } from "../features/credentials/createCredentialsAssembly.js";
 import { createTutorialAssembly } from "../features/tutorial/createTutorialAssembly.js";
 import { createHublot, hublotVisible, listHublots, removeHublot } from "../lib/hublotActions.js";
@@ -132,6 +135,7 @@ const composerAssembly = createComposerAssembly({
   removeLocalEcho: (text) => transcriptOperations.removeLocalEcho(text),
   rpc: (...args) => rpc(...args),
   schedulePostSendSync: (text) => schedulePostSendFileTranscriptSync(text),
+  interceptSend: (text) => threadsAssembly.operations.interceptSend(text),
   toast: addToast,
 });
 const composerOperations = composerAssembly.operations;
@@ -201,6 +205,7 @@ const sessionAssembly = createSessionAssembly({
     // selection rather than waiting for get_state/transcript replay to finish.
     void loadHublots(selectedRunner?.sessionId ?? null);
     void loadRoutines();
+    void threadsAssembly.operations.sessionChanged();
   },
   stateApplier: {
     applySessionState,
@@ -215,7 +220,7 @@ const sessionAssembly = createSessionAssembly({
       setRoutines: routines.set,
       setRoutineScopeAll: routineScopeAll.set,
       setRoutineCurrentSessionId: routineCurrentSessionId.set,
-      onSessionChanged: () => { void loadHublots(); },
+      onSessionChanged: () => { void loadHublots(); void threadsAssembly.operations.refresh(); },
       updateHeaderState,
       setBusy: (value) => setBusy(value),
       setCompacting: (value) => setCompacting(value),
@@ -352,7 +357,7 @@ const platformEvents = platformAssembly.configureEvents({
       resetWorkTimer,
       isGateRequired: platformAssembly.state.isTranscriptGateRequired,
       agentStart: () => agentStart(),
-      agentCompletion: () => { void acknowledgeCurrentAttention(); return agentCompletion(); },
+      agentCompletion: () => { void acknowledgeCurrentAttention(); void threadsAssembly.operations.refresh(); return agentCompletion(); },
       transcriptDispatch: (msg) => transcriptFeature.dispatch(msg),
     },
   },
@@ -399,7 +404,8 @@ const claudeTranscriptPoller = createClaudeTranscriptPoller({
     if (!response.ok) throw new Error(result.error || `Claude transcript sync failed (${response.status})`);
     return result;
   },
-  reload: () => reloadTranscript(),
+  // Through the scheduler, so a mirrored update waits for a text selection like every other background reload.
+  reload: () => { syncTranscriptSoon("claude-poll", 0); },
   onError: (error) => lifecycleLog("claudeTranscriptPoller:error", { error: error?.message ?? String(error) }),
 });
 const syncTranscriptSoon = transcriptOperations.syncTranscriptSoon;
@@ -778,6 +784,7 @@ function resourceSessionId() {
 }
 function handleRunnersChanged(runners) {
   sessionOperations.notifyRunnersChanged(runners);
+  threadsAssembly.operations.handleRunnersChanged(runners);
   // A brand-new runner has no session id at selection time. Refresh when its
   // authoritative runner metadata arrives instead of borrowing old state.
   void loadHublots();
@@ -817,6 +824,11 @@ resourceAssembly.configureActions({
 
 // ------------------------------------------------------------ session picker
 
+/** Threads are reached from inside their session, so session lists never show them. */
+function withoutThreads(sessions) {
+  return (sessions ?? []).filter((session) => !session.thread);
+}
+
 const sessionPickerRuntime = sessionAssembly.configurePicker({
   uiActions,
   storeSnapshot,
@@ -835,7 +847,7 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
     const response = await fetch(`/sessions${query ? `?${query}` : ""}`);
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || `failed to list sessions (${response.status})`);
-    return data.sessions ?? [];
+    return withoutThreads(data.sessions);
   },
   getRunners: () => getRunners(),
   toast: addToast,
@@ -873,8 +885,8 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
     const dirQ = getWorkdir() ? `?dir=${encodeURIComponent(getWorkdir())}` : "";
     const [res, allRes] = await Promise.all([fetch(`/sessions${dirQ}`), fetch("/sessions?all=1")]);
     if (!res.ok) { addToast(`failed to list sessions (${res.status})`, "error"); return { sessions: [], allSessions: [], folders: [], currentFolder: null }; }
-    const { sessions } = await res.json();
-    const allSessions = allRes.ok ? (await allRes.json()).sessions ?? sessions : sessions;
+    const sessions = withoutThreads((await res.json()).sessions);
+    const allSessions = allRes.ok ? withoutThreads((await allRes.json()).sessions ?? sessions) : sessions;
     const folderData = await (async () => {
       try {
         const response = await fetch(`/session-folders${dirQ}`);
@@ -887,7 +899,9 @@ const sessionPickerRuntime = sessionAssembly.configurePicker({
     return { sessions, allSessions, ...folderData };
   },
   getCurrentSessionId: (sessions) => {
-    const currentIdentity = runnerSessionIdentity(getRunners().find((runner) => runner.id === getCurrentRunner()))
+    // Inside a thread, the listed session that is "current" is the one the thread belongs to.
+    const currentInfo = getRunners().find((runner) => runner.id === getCurrentRunner());
+    const currentIdentity = runnerRootSessionKey(currentInfo) ?? runnerSessionIdentity(currentInfo)
       ?? getSessionState()?.sessionFile;
     return sessions.find((session) => sameSession(session, currentIdentity))?.id ?? getSessionState()?.sessionId;
   },
@@ -948,6 +962,39 @@ const transcriptRuntime = transcriptAssembly.configureFeature({
 });
 const transcriptFeature = transcriptRuntime.feature;
 const annotateTranscriptEntries = transcriptOperations.annotateTranscriptEntries;
+
+// ------------------------------------------------------------ threads
+//
+// A thread is a fork of the session, anchored to a passage quoted from a reply.
+// It opens in place of the transcript and is reached from the reply it hangs
+// from, the thread header, or the tree behind the composer's tree button.
+
+const threadsAssembly = createThreadsAssembly({
+  fetchImpl: runtimeFetch,
+  uiActions,
+  windowTarget: window,
+  toast: addToast,
+  confirm: extensionUiAdapters.confirm,
+  openModal,
+  closeModal,
+  getCurrentRunnerInfo: () => getRunners().find((runner) => runner.id === getCurrentRunner()) ?? null,
+  getSessionSettings: () => ({ model: getSessionState()?.model ?? null, thinkingLevel: getSessionState()?.thinkingLevel ?? null }),
+  resolveEntryId: (element) => transcriptOperations.resolveEntryId(element),
+  focusEntry: (entryId) => focusEntryById(entryId),
+  setAfterTranscript: transcriptOperations.setAfterTranscript,
+  // A runner the server just named is switched to directly. Otherwise the session is reopened by
+  // key: the server uses the session's own folder, but the route still expects one to be named.
+  openSession: ({ sessionKey, runnerId = null }) => runnerId
+    ? getSessionRuntime().switchRunner(runnerId)
+    : getSessionRuntime().openAndSwitchSession({ sessionKey, dir: getWorkdir() }),
+  focusComposer: () => input.focus(),
+  restoreComposerText: (text) => composerOperations.insertText(text),
+  getFamily: () => get(threadFamily),
+  setFamily: setThreadFamily,
+  getDraft: () => get(threadDraft),
+  setDraft: threadDraft.set,
+  setPending: threadPending.set,
+});
 const copyPermalink = transcriptOperations.copyPermalink;
 const focusEntryById = transcriptOperations.focusEntryById;
 const { focusMessageBySnippet, flash: flashEl } = transcriptRuntime;
@@ -1071,6 +1118,7 @@ const detachRuntimeEventAdapters = () => {
   detachCheckpointTreeActions();
   detachSessionPickerActions();
   transcriptAssembly.teardown();
+  threadsAssembly.teardown();
   claudeTranscriptPoller.teardown();
   resourceAssembly.teardown();
   credentialsAssembly.teardown();

@@ -468,6 +468,17 @@ test("open-session rejects stale SQLite IDs and uses the persisted cwd", async (
   await staleRoute({ body: { sessionKey: "stale-key" } }, stale);
   assert.equal(stale.status, 404);
   assert.match(stale.body.error, /session not found: stale/);
+
+  // A thread that forks on its first launch is held by a runner before its session is saved.
+  const { dependencies: threadDependencies, state } = setup();
+  const pending = { backend: "sqlite", id: "unsaved-fork", storagePath: "/agent/sessions.sqlite" };
+  state.sessionReferences = { equals: (left, right) => left.backend === right.backend && left.id === right.id };
+  state.runners.set("runner-fork", { id: "runner-fork", sessionRef: pending });
+  threadDependencies.sessionReferenceParam = () => pending;
+  threadDependencies.lookupSessionReference = () => null;
+  const held = response();
+  await createRunnerRoutes(threadDependencies)["POST /open-session"]({ body: { sessionKey: "fork-key", dir: "/allowed/requested" } }, held);
+  assert.equal(held.status, 200);
 });
 
 test("open-session rejects malformed and ambiguous payloads", async () => {

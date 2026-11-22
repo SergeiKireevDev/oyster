@@ -93,6 +93,8 @@ function codexArgs(run) {
   if (run.resume && run.sessionId) {
     return ["exec", "resume", ...common, run.sessionId, run.prompt];
   }
+  // First turn of a thread: Codex copies the source session and assigns the copy a new id.
+  if (run.fork) return ["exec", "fork", ...common, run.fork, run.prompt];
   return ["exec", ...common, run.prompt];
 }
 
@@ -251,11 +253,17 @@ function runNext() {
   spawnChild(queue.shift());
 }
 
+/** The session a thread's first turn forks, when the driver named one. */
+function forkSource(message) {
+  return typeof message.fork === "string" && message.fork ? message.fork : null;
+}
+
 function runPrompt(message) {
   const run = {
     prompt: String(message.prompt ?? ""),
     sessionId: typeof message.sessionId === "string" && message.sessionId ? message.sessionId : null,
     resume: message.resume === true,
+    fork: forkSource(message),
     steer: message.steer === true,
     model: typeof message.model === "string" && message.model ? message.model : null,
     effort: typeof message.effort === "string" && /^[a-z][a-z0-9_-]*$/i.test(message.effort) ? message.effort : null,

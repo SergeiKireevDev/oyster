@@ -39,7 +39,7 @@ test("runner driver registry selects defaults and compatible harnesses", () => {
   assert.equal(registry.get().id, "pi");
   assert.equal(registry.get("claude-code").label, "claude-code");
   assert.equal(registry.compatible({ backend: "claude-code" }).id, "claude-code");
-  assert.deepEqual(registry.list(), [{ id: "pi", label: "pi" }, { id: "claude-code", label: "claude-code" }]);
+  assert.deepEqual(registry.list(), [{ id: "pi", label: "pi", threadFork: null }, { id: "claude-code", label: "claude-code", threadFork: null }]);
   assert.throws(() => registry.get("missing"), /harness is unavailable/);
   assert.throws(() => createRunnerDriverRegistry({ drivers: [driverStub("pi"), driverStub("pi")] }), /duplicate/);
 });

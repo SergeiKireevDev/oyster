@@ -75,6 +75,19 @@ export function mergeClaudeTranscriptMessages(durableMessages, liveMessages) {
   return [...durable, ...live];
 }
 
+/**
+ * A live pi snapshot of a thread holds the whole forked conversation. Keep
+ * only what the thread wrote: everything inherited predates its creation.
+ */
+export function threadOwnMessages(liveMessages, thread) {
+  const since = Date.parse(thread?.createdAt ?? "");
+  if (!Number.isFinite(since)) return liveMessages;
+  return liveMessages.filter((message) => {
+    const timestamp = comparableTimestamp(message);
+    return timestamp === null || timestamp >= since;
+  });
+}
+
 /** Flush buffered live events after canonical rendering while suppressing duplicate completions. */
 /** Own transcript replay and gate state while publishing UI-visible status. */
 export function createReplayUiState({ updateAppSession, log = () => {}, replaying = true, transcriptGateRequired = true } = {}) {
@@ -121,13 +134,22 @@ export function isComposerReadyForSend({ connected, replaying, transcriptGateReq
   return connected && !blockingReplay;
 }
 
-export function createTranscriptSyncScheduler({ isReplaying, hasRunner, reload, onError = () => {}, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
+/** How long a re-render waits for the reader to finish with a text selection (60 × 500 ms). */
+export const TRANSCRIPT_SYNC_MAX_DEFERRALS = 60;
+
+/**
+ * `shouldDefer` postpones the reload while it would get in the reader's way:
+ * re-rendering replaces the transcript's nodes and so drops a text selection.
+ * The wait is bounded so a forgotten selection cannot keep the view stale.
+ */
+export function createTranscriptSyncScheduler({ isReplaying, hasRunner, reload, shouldDefer = () => false, onError = () => {}, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
   const timers = new Set();
-  const schedule = (label, delay = 250) => {
+  const schedule = (label, delay = 250, deferrals = 0) => {
     let timer;
     timer = setTimeoutImpl(() => {
       timers.delete(timer);
-      if (isReplaying() || !hasRunner()) return schedule(label, 500);
+      if (isReplaying() || !hasRunner()) return schedule(label, 500, deferrals);
+      if (deferrals < TRANSCRIPT_SYNC_MAX_DEFERRALS && shouldDefer()) return schedule(label, 500, deferrals + 1);
       reload().catch((error) => onError(label, error));
     }, delay);
     timers.add(timer);
@@ -199,6 +221,7 @@ export function createTranscriptPermalinkRuntime({
   const getEntryId = (element) => resolveTranscriptEntryId({ element, fetchEntries, elements, findEntry });
   return {
     annotate,
+    resolveEntryId: getEntryId,
     copyPermalink: createPermalinkController({ getSessionId, getEntryId, getOrigin, copy, prompt, toast }),
     focusEntryById: createTranscriptEntryFocusController({
       annotate, findDirect, fetchEntries, elements, matches, normalize, alignedIndex, flash, toast,
@@ -325,6 +348,9 @@ export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl
         });
         log("reloadTranscript:session-messages:done", { ms: Math.round(now() - started), messages: messages.length, dormant: true });
       } else {
+        // Set by the durable page when the open session is a thread.
+        const durable = { thread: null };
+        const nativeHarness = ["claude-code", "codex", "gemini", "amp", "antigravity"].includes(getRunnerInfo?.()?.harness);
         ({ messages } = await loadDurableCanonicalTranscript({
           rpc,
           applyState: (state) => { if (isCurrent()) applyState(state); },
@@ -333,16 +359,19 @@ export function createCanonicalTranscriptController({ rpc, applyState, fetchImpl
           getSessionIdentity,
           onState: (state) => log("reloadTranscript:get_state:done", { ms: Math.round(now() - started), messageCount: state?.messageCount ?? null, sessionFile: state?.sessionFile ?? null }),
           onMessages: (result) => {
-            onDurablePage({ page: { before: null, hasMore: false, total: result?.messages?.length ?? 0 } }, getSessionIdentity?.());
+            // A thread keeps its durable cursor: it still points at the inherited history.
+            if (!durable.thread) onDurablePage({ page: { before: null, hasMore: false, total: result?.messages?.length ?? 0 } }, getSessionIdentity?.());
             log("reloadTranscript:get_messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 });
           },
           onDurableMessages: (result) => {
+            durable.thread = result?.thread ?? null;
             onDurablePage(result, getSessionIdentity?.());
             log("reloadTranscript:session-messages:done", { ms: Math.round(now() - started), messages: result?.messages?.length ?? 0 });
           },
-          mergeLiveMessages: ["claude-code", "codex", "gemini", "amp", "antigravity"].includes(getRunnerInfo?.()?.harness)
-            ? mergeClaudeTranscriptMessages
-            : undefined,
+          mergeLiveMessages: (durableMessages, liveMessages) => {
+            if (nativeHarness) return mergeClaudeTranscriptMessages(durableMessages, liveMessages);
+            return durable.thread ? threadOwnMessages(liveMessages, durable.thread) : liveMessages;
+          },
         }));
       }
     } catch (error) {

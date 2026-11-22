@@ -146,6 +146,7 @@ export function createSessionRoutes({
   resources,
   sessionOperations = null,
   deleteOwnedSession = null,
+  threads = null,
   resolvePath = resolve,
   unlinkFile = unlinkSync,
   now = () => Date.now(),
@@ -191,7 +192,47 @@ export function createSessionRoutes({
       : sessionReferenceFor(session);
   }
 
-  async function decorate(session, byLegacyPath = new Map()) {
+  /** Thread lineage keyed by session key, read once per request so listings never show stale lineage. */
+  async function threadLineage() {
+    const lineage = new Map();
+    if (!threads) return lineage;
+    for (const row of await threads.list()) {
+      const thread = threads.describe(row);
+      lineage.set(thread.sessionKey, { id: thread.id, parentSessionKey: thread.parentSessionKey, rootSessionKey: thread.rootSessionKey });
+    }
+    return lineage;
+  }
+
+  /**
+   * A thread's transcript starts at its fork. Inherited messages are flagged
+   * and kept behind the page cursor, so the first page a client loads holds
+   * only what the thread itself wrote; paging backwards reveals the context.
+   */
+  async function threadTranscript(reference, transcript) {
+    const row = reference && threads ? await threads.findBySession(reference) : null;
+    if (!row) return null;
+    const messages = Array.isArray(transcript.messages) ? transcript.messages : [];
+    const boundary = threads.boundaryIndex(messages, row);
+    transcript.messages = messages.map((message, index) => index < boundary ? { ...message, inherited: true } : message);
+    transcript.thread = { id: row.id, boundary, createdAt: row.created_at };
+    return transcript.thread;
+  }
+
+  function threadTranscriptPage(messages, pageRequest, boundary) {
+    const result = transcriptPage(messages, pageRequest);
+    const end = pageRequest.before === null ? messages.length : Math.min(pageRequest.before, messages.length);
+    const start = end - result.messages.length;
+    // The newest page always starts at or after the fork, even while the thread is still empty.
+    const crossesFork = start < boundary && (pageRequest.before === null || end > boundary);
+    if (!crossesFork) return result;
+    // This page would reach back into inherited history: stop it at the fork.
+    return {
+      messages: messages.slice(boundary, end),
+      page: { before: boundary > 0 ? boundary : null, hasMore: boundary > 0, total: messages.length, threadStart: boundary > 0 },
+    };
+  }
+
+  async function decorate(session, byLegacyPath = new Map(), lineage = null) {
     const sessionRef = referenceFor(session);
     let parentSessionKey = null;
     if (sqlite && session.parentSessionId) {
@@ -214,6 +255,7 @@ export function createSessionRoutes({
       parentSessionKey,
       sessionRef,
       sessionKey: state.sessionReferences.serialize(sessionRef),
+      thread: (lineage ?? await threadLineage()).get(state.sessionReferences.serialize(sessionRef)) ?? null,
     };
   }
 
@@ -226,6 +268,12 @@ export function createSessionRoutes({
       } catch { return null; }
     }
     return sqlite ? null : sessionTargetFromSearch(url);
+  }
+
+  /** The validated reference behind a `key=` request, when one was given. */
+  function requestedReference(url) {
+    try { return state.sessionReferences.parse(String(url.searchParams.get("key") ?? "")); }
+    catch { return null; }
   }
 
   function parseTranscriptPage(url) {
@@ -285,13 +333,95 @@ export function createSessionRoutes({
     return null;
   }
 
-  function decorateSearchResults(result) {
+  async function decorateSearchResults(result) {
+    const lineage = await threadLineage();
     result.results = result.results.map((hit) => {
       const source = sqlite ? { id: hit.sessionId } : { id: hit.sessionId, path: hit.sessionPath };
       const sessionRef = referenceFor(source);
-      return { ...hit, sessionRef, sessionKey: state.sessionReferences.serialize(sessionRef) };
+      const sessionKey = state.sessionReferences.serialize(sessionRef);
+      return { ...hit, sessionRef, sessionKey, thread: lineage.get(sessionKey) ?? null };
     });
     return result;
+  }
+
+  /** Threads of harnesses without agent-store lineage are only known to the thread registry. */
+  async function archiveThreadDescendants(reference, references, archived) {
+    const repository = state.appStore?.repositories?.sessions;
+    for (const { reference: threadReference } of await threads?.descendants(reference) ?? []) {
+      if (references.some((known) => state.sessionReferences.equals(known, threadReference))) continue;
+      const owner = await repository?.find({ backend: threadReference.backend, sessionId: threadReference.id, storagePath: threadReference.storagePath ?? null });
+      if (owner) await repository.setArchived(owner.id, archived);
+      references.push(threadReference);
+    }
+  }
+
+  function runnersOf(reference) {
+    return [...state.runners.values()].filter((runner) => runner.sessionRef
+      ? state.sessionReferences.equals(runner.sessionRef, reference)
+      : reference.backend === "jsonl" && runner.sessionFile === reference.storagePath);
+  }
+
+  function sessionDeletionOperations() {
+    return sessionOperations ?? {
+      capabilities: { delete: { jsonl: true, sqlite: false } },
+      async deleteSession(sessionRef) {
+        unlinkFile(sessionRef.storagePath);
+        return { deleted: sessionRef.storagePath };
+      },
+    };
+  }
+
+  /** A thread whose harness never wrote its fork has no agent session left to delete. */
+  async function deleteAgentSession(operations, reference, { tolerateMissing }) {
+    try { return await operations.deleteSession(reference); }
+    catch (error) {
+      if (!tolerateMissing || (error?.code !== "not_found" && error?.code !== "ENOENT" && !/not found/i.test(String(error?.message)))) throw error;
+      return { deleted: reference.id };
+    }
+  }
+
+  /** Stop, delete and unregister exactly one session through the durable deletion workflow. */
+  async function deleteSessionReference(reference, { tolerateMissing = false } = {}) {
+    const operations = sessionDeletionOperations();
+    const matchingRunners = runnersOf(reference);
+    const workflow = deleteOwnedSession ?? (async (steps) => {
+      const stoppedRunners = await steps.stopRunners();
+      const stoppedRoutines = await steps.stopRoutines();
+      const agentResult = await steps.deleteAgentSession();
+      await steps.removeRuntime(stoppedRunners);
+      await steps.broadcast();
+      const closedHublots = await steps.closeHublots();
+      const deletedRoutines = await steps.deleteRoutines();
+      return { agentResult, closedHublots, stoppedRoutines, deletedRoutines };
+    });
+    return workflow({
+      reference,
+      stopRunners: async () => { for (const runner of matchingRunners) await stopRunner(runner); return matchingRunners; },
+      closeHublots: async () => {
+        if (closeSessionHublots) return closeSessionHublots(state, reference.id);
+        const closed = [];
+        for (const tunnel of await listTunnels(state)) {
+          if (tunnel.sessionId !== reference.id) continue;
+          await closeTunnel(state, tunnel.id);
+          closed.push(tunnel.port);
+          logger.log(`[oyster] closed hublot :${tunnel.port} (session ${reference.id} deleted)`);
+        }
+        return closed;
+      },
+      stopRoutines: () => stopSessionRoutines(state, reference.id),
+      deleteRoutines: () => deleteSessionRoutines(state, reference.id),
+      deleteAgentSession: () => deleteAgentSession(operations, reference, { tolerateMissing }),
+      removeRuntime: async (stoppedRunners) => {
+        for (const runner of stoppedRunners) {
+          state.runners.delete(runner.id);
+          if (state.defaultRunnerId === runner.id) {
+            state.defaultRunnerId = null;
+            await state.appSettings?.setDefaultRunnerId(null);
+          }
+        }
+      },
+      broadcast: () => runnersChanged(),
+    });
   }
 
   return {
@@ -349,8 +479,9 @@ export function createSessionRoutes({
         }
         const byLegacyPath = new Map(summaries.filter((session) => session.path).map((session) => [session.path, session]));
         const live = [...state.runners.values()];
+        const lineage = await threadLineage();
         const result = await Promise.all(summaries.map(async (summary) => {
-          const session = await decorate(summary, byLegacyPath);
+          const session = await decorate(summary, byLegacyPath, lineage);
           const runner = live.find((candidate) => candidate.sessionRef
             ? state.sessionReferences.equals(candidate.sessionRef, session.sessionRef)
             : candidate.sessionFile === session.path);
@@ -396,6 +527,7 @@ export function createSessionRoutes({
       const archived = body.archived !== false;
       try {
         const references = await setSessionFamilyArchived({ state, catalog, sessionReferenceFor, rootReference: reference, archived, includeAncestors: !archived, now });
+        await archiveThreadDescendants(reference, references, archived);
         if (archived) {
           for (const runner of state.runners.values()) {
             const belongsToFamily = runner.sessionRef
@@ -431,63 +563,27 @@ export function createSessionRoutes({
         json(res, HTTP_BAD_REQUEST, { error: `not a session reference: ${url.searchParams.get("path") ?? key}` });
         return;
       }
-      const operations = sessionOperations ?? {
-        capabilities: { delete: { jsonl: true, sqlite: false } },
-        async deleteSession(sessionRef) {
-          unlinkFile(sessionRef.storagePath);
-          return { deleted: sessionRef.storagePath };
-        },
-      };
+      const operations = sessionDeletionOperations();
       if (!operations?.capabilities?.delete?.[reference.backend]) {
         json(res, HTTP_CONFLICT, { error: `${reference.backend} session deletion is not supported by the configured pi` });
         return;
       }
-      const matchingRunners = [...state.runners.values()].filter((runner) => runner.sessionRef
-        ? state.sessionReferences.equals(runner.sessionRef, reference)
-        : reference.backend === "jsonl" && runner.sessionFile === reference.storagePath);
-      const workflow = deleteOwnedSession ?? (async (steps) => {
-        const stoppedRunners = await steps.stopRunners();
-        const stoppedRoutines = await steps.stopRoutines();
-        const agentResult = await steps.deleteAgentSession();
-        await steps.removeRuntime(stoppedRunners);
-        await steps.broadcast();
-        const closedHublots = await steps.closeHublots();
-        const deletedRoutines = await steps.deleteRoutines();
-        return { agentResult, closedHublots, stoppedRoutines, deletedRoutines };
-      });
       try {
-        const outcome = await workflow({
-          reference,
-          stopRunners: async () => { for (const runner of matchingRunners) await stopRunner(runner); return matchingRunners; },
-          closeHublots: async () => {
-            if (closeSessionHublots) return closeSessionHublots(state, reference.id);
-            const closed = [];
-            for (const tunnel of await listTunnels(state)) {
-              if (tunnel.sessionId !== reference.id) continue;
-              await closeTunnel(state, tunnel.id);
-              closed.push(tunnel.port);
-              logger.log(`[oyster] closed hublot :${tunnel.port} (session ${reference.id} deleted)`);
-            }
-            return closed;
-          },
-          stopRoutines: () => stopSessionRoutines(state, reference.id),
-          deleteRoutines: () => deleteSessionRoutines(state, reference.id),
-          deleteAgentSession: () => operations.deleteSession(reference),
-          removeRuntime: async (stoppedRunners) => {
-            for (const runner of stoppedRunners) {
-              state.runners.delete(runner.id);
-              if (state.defaultRunnerId === runner.id) {
-                state.defaultRunnerId = null;
-                await state.appSettings?.setDefaultRunnerId(null);
-              }
-            }
-          },
-          broadcast: () => runnersChanged(),
-        });
+        // Threads go first, deepest first, so a failure never strands a thread without its parent.
+        const deletedThreads = [];
+        for (const descendant of await threads?.descendants(reference) ?? []) {
+          await deleteSessionReference(descendant.reference, { tolerateMissing: true });
+          deletedThreads.push(descendant.id);
+        }
+        threads?.forget(deletedThreads);
+        const own = await threads?.findBySession(reference);
+        const outcome = await deleteSessionReference(reference, { tolerateMissing: Boolean(own) });
+        if (own) threads.forget([own.id]);
         json(res, HTTP_OK, {
           deleted: outcome.agentResult.deleted,
           closedHublots: outcome.closedHublots,
           releasedRoutines: outcome.deletedRoutines,
+          deletedThreads,
         });
       } catch (error) {
         const status = error?.code === "capability_unavailable" ? HTTP_CONFLICT : HTTP_INTERNAL_SERVER_ERROR;
@@ -523,8 +619,10 @@ export function createSessionRoutes({
         const transcript = await catalog.messages(identity);
         const saved = transcript.sessionId ? await catalog.findById?.(transcript.sessionId) : null;
         attachNativeCodexState(transcript, saved);
+        const thread = await threadTranscript(requestedReference(url), transcript);
         if (pageRequest.limit === null) { json(res, HTTP_OK, transcript); return; }
-        const page = transcriptPage(Array.isArray(transcript.messages) ? transcript.messages : [], pageRequest);
+        const messages = Array.isArray(transcript.messages) ? transcript.messages : [];
+        const page = thread ? threadTranscriptPage(messages, pageRequest, thread.boundary) : transcriptPage(messages, pageRequest);
         json(res, HTTP_OK, { ...transcript, messages: page.messages, page: page.page });
       } catch (error) { json(res, HTTP_INTERNAL_SERVER_ERROR, { error: `failed to parse session: ${errorMessage(error)}` }); }
     },
@@ -548,7 +646,7 @@ export function createSessionRoutes({
       const error = validateSearchRequest({ query, scope, path, sessionIdentity });
       if (error) { json(res, HTTP_BAD_REQUEST, { error }); return; }
       try {
-        const result = decorateSearchResults(await catalog.search(sqlite ? {
+        const result = await decorateSearchResults(await catalog.search(sqlite ? {
           q: query,
           scope,
           path: scope === "session" ? sessionIdentity : path,

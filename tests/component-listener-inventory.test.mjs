@@ -25,6 +25,7 @@ test("component browser and imperative listener inventory is explicit", () => {
   assert.deepEqual(locations(/\b(?:document|window)\b|\.(?:add|remove)EventListener\(/), [
     "components/Menu.svelte:100:<svelte:document onclick={close} />",
     "components/OptionPickerModal.svelte:89:<svelte:document onkeydowncapture={handleKeydown} />",
+    "components/threads/ThreadSelectionToolbar.svelte:79:<svelte:document onselectionchange={measurement.schedule} onscrollcapture={measurement.schedule} onpointerup={releasePress} onpointercancel={releasePress} />",
   ]);
 
   const transcript = source(new URL("components/Transcript.svelte", root));
@@ -59,6 +60,12 @@ test("Svelte-managed document and element integrations stay on the approved list
     // Native popover positioning/focus is covered by harness-chooser and sessions E2E tests.
     'components/SessionSidebar.svelte:<div use:attachHarnessChooser class="session-harness-popover" popover="auto" role="dialog" aria-label="Choose session harness">',
     "components/Tutorial.svelte:use:tutorialPresentation={{",
+    // Quote highlighting is a best-effort decoration; its matching is unit-tested in threads-client.
+    'components/threads/ThreadMarkers.svelte:<div class="thread-markers" class:expanded use:highlightThreadQuotes={quotes}>',
+    // The selection toolbar follows the text selection; its placement is covered by the threads E2E test.
+    "components/threads/ThreadSelectionToolbar.svelte:<svelte:document onselectionchange={measurement.schedule} onscrollcapture={measurement.schedule} onpointerup={releasePress} onpointercancel={releasePress} />",
+    "components/threads/ThreadSelectionToolbar.svelte:use:reportNode={toolbarMounted}",
+    "components/threads/ThreadTreeModal.svelte:use:scrollIntoViewWhen={node.current}",
     "components/transcript/AssistantMessage.svelte:<div class=\"assistant-entry\" class:empty={empty} data-role={role} bind:this={root} use:reportNode={onRoot}>",
     "components/transcript/UserMessage.svelte:<details class=\"block tool interface-message\" class:ckpt-frozen={restore !== null} data-role=\"user\" bind:this={root} use:reportNode={onRoot}>",
     "components/transcript/UserMessage.svelte:<div class=\"message-row user-message-row\" data-role=\"user\" bind:this={root} use:reportNode={onRoot}>",

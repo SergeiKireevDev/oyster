@@ -13,6 +13,7 @@ no network model calls, fully deterministic**.
 | `checkpoint-rollback.spec.js` | Start a session in a git repo → commit changes, **freeze** (🧊) → recommit, freeze again → **roll back** (↩) to the first checkpoint into a forked session. |
 | `sessions.spec.js` | **Session management**: start sessions and ■ **stop** a session's background process; **switch** between sessions and confirm the transcript follows; **search** across sessions and jump to a highlighted hit; autocomplete composer paths and fall back to the file explorer for large result sets. |
 | `sqlite-container-persistence.spec.js` | Create a SQLite conversation, replace the container on its isolated agent volume, and verify picker/search/transcript resume with no JSONL files. |
+| `threads.spec.js` | Select text in a reply → ask **Why?** to fork the session into a **thread** that opens in place and stays out of the session list; load its earlier context, return with browser Back, reopen it from the reply, nest a thread, navigate the **thread tree**; draft a thread with **Other…**, delete a thread with what hangs from it, and fork a mock **Claude Code** session. |
 | `transcript-rendering.spec.js` | Verify agent display math renders through KaTeX and completed historical SQLite tool calls remain completed after tail-first transcript reload. |
 | `hub.spec.js` | Start the ordinary isolated Docker spoke plus a temporary Hub process, connect through the Hub interface with one shared token file, and verify workspace-scoped mobile session creation. |
 

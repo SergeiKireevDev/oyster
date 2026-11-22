@@ -382,6 +382,27 @@ function maybeLoadCodexResumeModel({ kind, runtime, bridgeOptions, env }) {
   if (saved?.effort && !runtime.thinkingLevel) runtime.thinkingLevel = saved.effort;
 }
 
+/**
+ * A thread runner forks its parent's native session on its first turn. Record
+ * the source on the driver runtime: the runner manager clears `forkSource`
+ * once the session exists, but the transcript sink still needs it to copy the
+ * inherited history.
+ */
+function prepareCodexFork({ kind, runner, runtime, bridgeOptions, env }) {
+  const source = runner.forkSource;
+  if (kind !== "codex" || runtime.initialized || typeof source?.sessionId !== "string" || !source.sessionId) return;
+  runtime.forkedFrom = { sessionId: source.sessionId, entryId: typeof source.entryId === "string" ? source.entryId : null };
+  inheritCodexSettings({ source, runtime, home: bridgeOptions.codexHome || env.CODEX_HOME || process.env.CODEX_HOME || join(homedir(), ".codex") });
+}
+
+/** A thread starts on the model and effort its parent last ran with. */
+function inheritCodexSettings({ source, runtime, home }) {
+  const saved = createCodexSessionStateReader(home, source.sessionId)();
+  const named = typeof source.model?.id === "string" ? source.model.id.trim() : "";
+  if (!runtime.selectedModel && !runtime.model) runtime.model = named || saved?.model.id || null;
+  if (saved?.effort && !runtime.thinkingLevel) runtime.thinkingLevel = saved.effort;
+}
+
 function bridgeConfigFor({ kind, executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode, bridgeOptions, runtime, route }) {
   return {
     ...(kind === "codex" && runtime.initialized ? { resumeSessionId: runtime.sessionId } : {}),
@@ -534,6 +555,8 @@ function promptPayload({ text, generateSessionId, runtime, kind }) {
     prompt: text,
     sessionId: generateSessionId || runtime.initialized ? runtime.sessionId : null,
     resume: runtime.initialized,
+    // Only a thread's first turn forks; afterwards the copy is resumed like any session.
+    ...(!runtime.initialized && runtime.forkedFrom?.sessionId ? { fork: runtime.forkedFrom.sessionId } : {}),
     steer: runtime.streaming,
     model: kind === "amp" ? runtime.selectedModel ?? null : runtime.selectedModel ?? runtime.model,
     ...(runtime.thinkingLevel ? { effort: runtime.thinkingLevel } : {}),
@@ -606,7 +629,7 @@ export function createHeadlessDriver({
       });
       runtime.transcriptName = runtime.sessionName;
       runtime.transcriptBatches.push(structuredClone({ harness: id, sessionId: runtime.sessionId, cwd: runtime.cwd ?? runner.dir,
-        name: runtime.sessionName, entries }));
+        name: runtime.sessionName, entries, ...(runtime.forkedFrom ? { forkFrom: runtime.forkedFrom } : {}) }));
     }
     if (runtime.transcriptPending || !runtime.transcriptBatches.length) return;
     runtime.transcriptPending = (async () => {
@@ -625,6 +648,7 @@ export function createHeadlessDriver({
 
   return Object.freeze(validateRunnerDriver({
     id, label: label ?? id,
+    threadFork: kind === "codex" ? "tip" : null,
     isSessionCompatible(reference) { return !reference || reference.backend === id || (Boolean(sqlitePath) && reference.backend === "sqlite"); },
 
     launch({ runner, cwd, systemPrompt }) {
@@ -640,6 +664,7 @@ export function createHeadlessDriver({
       }
       runtime.provider = nextProvider;
       maybeLoadCodexResumeModel({ kind, runtime, bridgeOptions, env });
+      prepareCodexFork({ kind, runner, runtime, bridgeOptions, env });
       const mcpUrl = oysterMcpUrl({ runnerId: runner.id ?? null, sessionId: provisionalId, workdir: cwd, uiUrl });
       const bridgeConfig = bridgeConfigFor({ kind, executable, cwd, extraArgs, systemPrompt, mcpUrl, sandbox, approvalMode, bridgeOptions, runtime, route });
       const environment = { ...globalThis.process.env, OYSTER_TOKEN: "", ...env, ...route?.env, OYSTER_HEADLESS_BRIDGE_CONFIG: JSON.stringify(bridgeConfig) };

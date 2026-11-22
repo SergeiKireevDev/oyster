@@ -77,6 +77,7 @@ test("session listing preserves root scope and live runner annotations", async (
     sessionKey: "key-session-a",
     parentSession: null,
     parentSessionKey: null,
+    thread: null,
   });
 });
 
@@ -103,6 +104,7 @@ test("session lookup, entries, messages, and folders preserve response shapes", 
     sessionKey: "key-session-a",
     parentSession: null,
     parentSessionKey: null,
+    thread: null,
   } });
 
   const missingId = response();
@@ -203,6 +205,7 @@ test("search validates scope and preserves filtering options, snippets, and resp
       sessionId: "session-a", sessionPath: "/sessions/folder/a.jsonl", snippet: "matching text",
       sessionRef: { backend: "jsonl", id: "session-a", storagePath: "/sessions/folder/a.jsonl" },
       sessionKey: "key-session-a",
+      thread: null,
     }],
   });
   assert.deepEqual(searches, [{
@@ -300,6 +303,7 @@ test("deleting a session isolates cross-session, global, rebound, and fork resou
     deleted: "/sessions/folder/a.jsonl",
     closedHublots: [4000],
     releasedRoutines: ["routine-a"],
+    deletedThreads: [],
   });
   assert.deepEqual(stopped, ["r1"]);
   assert.deepEqual(closed, ["t1"]);

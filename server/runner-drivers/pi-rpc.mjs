@@ -26,6 +26,7 @@ export function createPiRpcDriver({ config, processLauncher } = {}) {
     id: "pi",
     label: "pi",
     sessionBackend: config.PERSISTENT_STORE,
+    threadFork: "entry",
 
     isSessionCompatible(reference) {
       return !reference || reference.backend === config.PERSISTENT_STORE;

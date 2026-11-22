@@ -7,6 +7,7 @@ const REQUIRED_REPOSITORIES = Object.freeze({
   runnerEvents: "list",
   runners: "list",
   sessions: "find",
+  threads: "list",
 });
 
 const REQUIRED_CATALOG_METHODS = Object.freeze([

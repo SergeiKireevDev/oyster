@@ -4,6 +4,8 @@
   import AssistantMessage from "./transcript/AssistantMessage.svelte";
   import CompactionMarker from "./transcript/CompactionMarker.svelte";
   import UserMessage from "./transcript/UserMessage.svelte";
+  import ThreadHeader from "./threads/ThreadHeader.svelte";
+  import ThreadMarkers from "./threads/ThreadMarkers.svelte";
   import { appSession, appHeader } from "../stores/appSession.js";
   import EmptyConversation from "./EmptyConversation.svelte";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
@@ -16,6 +18,8 @@
   import { interleaveTranscriptActivity } from "../lib/transcriptActivity.js";
   import { formatWorkDuration, latestTranscriptWorkPeriod } from "../lib/workDuration.js";
   import { subscribeStoreGroup } from "../lib/storeGroup.js";
+  import { threadsByAnchor } from "../features/threads/threadModel.js";
+  import { threadAnchorKey, threadDraft, threadView } from "../stores/threads.js";
 
   const transcriptActivityLayout = derived(transcriptItems, (items, set) => {
     const assistantItems = items.filter((item) => item.assistantStore);
@@ -35,6 +39,18 @@
     workClock = undefined;
   }
 
+  // Where the thread header sits: above the first message the thread wrote
+  // itself, which is the end of the list until it has written one.
+  function threadHeaderPosition(items, inThread) {
+    if (!inThread) return -1;
+    const firstOwn = items.findIndex((item) => !item.inherited);
+    return firstOwn === -1 ? items.length : firstOwn;
+  }
+
+  // A drafted thread has no messages yet: its header stands in for the transcript.
+  $: drafting = Boolean($threadDraft);
+  $: threadHeaderIndex = threadHeaderPosition($transcriptItems, Boolean($threadView.current));
+  $: threadAnchors = threadsByAnchor($threadView.threads, $threadView.sessionKey);
   $: workPeriod = latestTranscriptWorkPeriod($transcriptItems, $appSession.workTimerResetAt);
   $: workDuration = workPeriod
     ? formatWorkDuration(($appSession.busy ? now : workPeriod.endedAt) - workPeriod.startedAt)
@@ -59,10 +75,14 @@
 </script>
 
 <div id="messages" class="transcript" aria-busy={$appSession.busy || $appSession.compacting}>
+  {#if drafting}
+    <ThreadHeader />
+  {:else}
   {#if !$transcriptItems.length && $appSession.connected && !$appSession.replayingTranscript && !$appSession.busy && !$appSession.compacting && $appSession.state?.messageCount === 0}
     <EmptyConversation workdir={$appSession.workdir} model={$appHeader.modelChip} onChoose={chooseStarter} />
   {/if}
-  {#each $transcriptItems as item (item.id)}
+  {#each $transcriptItems as item, index (item.id)}
+    {#if index === threadHeaderIndex}<ThreadHeader />{/if}
     {#if item.kind === "user"}
       <UserMessage
         text={item.text}
@@ -86,8 +106,10 @@
         displayBlocks={$transcriptActivityLayout.blocksById.get(item.id) ?? []}
         currentActivityKey={$appSession.busy ? $transcriptActivityLayout.currentActivityKey : null}
       />
+      {#if threadAnchors.has(item.entryId)}<ThreadMarkers threads={threadAnchors.get(item.entryId)} anchorKey={threadAnchorKey($threadView.sessionKey, item.entryId)} />{/if}
     {/if}
   {/each}
+  {#if threadHeaderIndex === $transcriptItems.length}<ThreadHeader />{/if}
   {#if workPeriod}
     <div class="transcript-status work-duration" class:active={$appSession.busy} aria-live="off">
       {#if $appSession.busy && !$appSession.compacting}<span class="spin" aria-hidden="true"></span>{/if}
@@ -99,6 +121,7 @@
       <span class="spin" aria-hidden="true"></span>
       <span>Compacting context…</span>
     </div>
+  {/if}
   {/if}
 </div>
 

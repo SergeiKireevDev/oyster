@@ -44,11 +44,11 @@ test("configured driver registry exposes every installed harness", () => {
   };
   const registry = createConfiguredRunnerDrivers({ config, piProcesses: { bin: "/opt/pi", launch: () => fakeProcess() } });
   assert.deepEqual(registry.list(), [
-    { id: "pi", label: "pi" },
-    { id: "claude-code", label: "Claude Code" },
-    { id: "codex", label: "Codex" },
-    { id: "gemini", label: "Gemini CLI" },
-    { id: "amp", label: "Amp" },
+    { id: "pi", label: "pi", threadFork: "entry" },
+    { id: "claude-code", label: "Claude Code", threadFork: "tip" },
+    { id: "codex", label: "Codex", threadFork: "tip" },
+    { id: "gemini", label: "Gemini CLI", threadFork: null },
+    { id: "amp", label: "Amp", threadFork: null },
   ]);
 });
 

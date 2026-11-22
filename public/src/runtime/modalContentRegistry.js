@@ -15,6 +15,7 @@ import RoutineManagerModal from "../components/RoutineManagerModal.svelte";
 import SessionPickerModal from "../components/SessionPickerModal.svelte";
 import SettingsModal from "../components/SettingsModal.svelte";
 import TextPromptModal from "../components/TextPromptModal.svelte";
+import ThreadTreeModal from "../components/threads/ThreadTreeModal.svelte";
 
 const modalComponents = Object.freeze({
   analytics: AnalyticsModal,
@@ -34,6 +35,7 @@ const modalComponents = Object.freeze({
   sessionPicker: SessionPickerModal,
   settings: SettingsModal,
   textPrompt: TextPromptModal,
+  threadTree: ThreadTreeModal,
 });
 
 function modalProps(content, context) {

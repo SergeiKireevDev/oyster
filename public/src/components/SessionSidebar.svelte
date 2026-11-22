@@ -19,6 +19,7 @@
   import { workspaceChanges } from "../stores/workspaces.js";
   import { cloudBrowser } from "../features/cloud/cloudBrowser.js";
   import { groupSessionCwdsByHierarchy, groupSessionSearchByHierarchy, groupSessionsByCwd, partitionSessionGroupsByArchive, prepareSessionEntryFamilies } from "../features/sessions/sessionPickerViewModel.js";
+  import { threadFamilyActivity } from "../features/threads/threadModel.js";
   import {
     SESSION_PICKER_ARCHIVE_ACTION,
     SESSION_PICKER_CHOOSE_ACTION,
@@ -293,9 +294,25 @@
 
   const searching = $derived($sessionPicker.query.trim().length >= SEARCH_QUERY_MIN_LENGTH);
   const searchEnvironments = $derived(hubMode ? groupSessionSearchByHierarchy($sessionPicker.searchResults, hierarchyDefaults) : []);
-  const sidebarRunners = $derived($appSession.runners.filter((runner) => runner.sessionId));
+  // Threads live inside their session: they never get a row of their own.
+  const sidebarRunners = $derived($appSession.runners.filter((runner) => runner.sessionId && !runner.thread));
   const currentRunner = $derived($appSession.runners.find((runner) => runner.id === $appSession.currentRunner));
   const currentCwd = $derived(currentRunner?.dir ?? null);
+  const currentRootSessionKey = $derived(currentRunner?.thread?.rootSessionKey ?? null);
+
+  /** A session row stands for its threads too: it is current, working or unread when one of them is. */
+  function entryPresence(session, runner) {
+    const sessionKey = sessionIdentity(session) ?? runnerSessionIdentity(runner);
+    const threads = threadFamilyActivity($appSession.runners, sessionKey);
+    return {
+      current: runner?.id === $appSession.currentRunner
+        || (!runner && session?.id === $sessionPicker.currentId)
+        || (currentRootSessionKey !== null && sessionKey === currentRootSessionKey),
+      alive: Boolean(runner?.alive) || threads.busy,
+      busy: Boolean(runner?.busy) || threads.busy,
+      unread: threads.unread,
+    };
+  }
   const sessionGroups = $derived(partitionSessionGroupsByArchive(
     groupSessionsByCwd($sessionPicker.allSessions, sidebarRunners),
   ).map((group) => ({ ...group, families: prepareSessionEntryFamilies(group.entries) })));
@@ -588,11 +605,12 @@
   {@const session = entry.session}
   {@const runner = entry.runner}
   {@const meta = sessionMeta(session, runner)}
-  {@const current = runner?.id === $appSession.currentRunner || (!runner && session?.id === $sessionPicker.currentId)}
+  {@const presence = entryPresence(session, runner)}
+  {@const current = presence.current}
   <div class="session-sidebar-entry" class:current class:session-family-parent={Boolean(familyKey)} class:session-timeline-entry={Boolean(timelineStatus)} class:status-running={timelineStatus === "running"} class:status-succeeded={timelineStatus === "succeeded"} class:status-failed={timelineStatus === "failed"}>
     <button
       type="button"
-      class:busy={runner?.busy}
+      class:busy={presence.busy}
       class="session-sidebar-row"
       title={`${label(session, runner)}\n${timelineStatus ? `${loopStatusLabel(timelineStatus)}\n` : ""}${abbreviateHomePath(cwd)}`}
       onclick={() => selectSessionEntry(session, runner, familyKey)}
@@ -600,11 +618,12 @@
       {#if timelineStatus}
         <span class="session-timeline-marker" role="img" aria-label={loopStatusLabel(timelineStatus)}></span>
       {:else}
-        <span class="s-dot" class:on={runner?.alive && !runner?.busy} class:busy={runner?.alive && runner?.busy} aria-hidden="true"></span>
+        <span class="s-dot" class:on={presence.alive && !presence.busy} class:busy={presence.alive && presence.busy} aria-hidden="true"></span>
       {/if}
       <span class="session-sidebar-copy">
         <span class="session-sidebar-titleline">
           <span class="session-sidebar-name">{label(session, runner)}</span>
+          {#if presence.unread}<span class="session-thread-unread" role="img" aria-label="A thread has a new reply" title="A thread has a new reply"></span>{/if}
           <HarnessPill harness={sessionHarness(session, runner)} />
         </span>
         {#if meta}
@@ -1309,6 +1328,7 @@
   .session-sidebar-folder,
   .session-sidebar-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .session-sidebar-name { font-size: 12.5px; font-weight: 580; }
+  .session-thread-unread { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--accent); }
   .session-sidebar-entry.current .session-sidebar-name { color: var(--selection-text); }
   .session-sidebar-folder { color: var(--muted); font: 10.5px var(--mono); }
   .session-sidebar-meta { color: var(--text-secondary); font-size: 11px; font-weight: 450; }
