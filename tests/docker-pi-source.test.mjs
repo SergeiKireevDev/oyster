@@ -39,13 +39,13 @@ test("clean pi builds hydrate generated AI model data through the package build"
 test("both runtime images include hublot, Git server, and every bundled agent harness", () => {
   for (const dockerfile of [deployment, local]) {
     assert.match(dockerfile, /procps ripgrep lsof python3/);
-    assert.match(dockerfile, /@anthropic-ai\/claude-code@2\.1\.260/);
-    assert.match(dockerfile, /@openai\/codex@0\.153\.4/);
+    assert.match(dockerfile, /@anthropic-ai\/claude-code@2\.1\.330/);
+    assert.match(dockerfile, /@openai\/codex@0\.171\.0/);
     assert.match(dockerfile, /@google\/gemini-cli@0\.58\.0/);
     assert.match(dockerfile, /AMP_VERSION=0\.0\.1788696031-g14d695/);
     assert.match(dockerfile, /AMP_SKIP_UPDATE_CHECK=1/);
-    assert.match(dockerfile, /claude --version \| grep -q '\^2\\\.1\\\.260 '/);
-    assert.match(dockerfile, /codex --version \| grep -q '0\\\.153\\\.4'/);
+    assert.match(dockerfile, /claude --version \| grep -q '\^2\\\.1\\\.330 '/);
+    assert.match(dockerfile, /codex --version \| grep -q '0\\\.171\\\.0'/);
     assert.match(dockerfile, /gemini --version \| grep -q '\^0\\\.58\\\.0'/);
     assert.match(dockerfile, /COPY extensions \.\/extensions/);
     assert.match(dockerfile, /mkdir -p[^\n]*\/home\/node\/\.codex[^\n]*\/home\/node\/\.config\/amp/);
