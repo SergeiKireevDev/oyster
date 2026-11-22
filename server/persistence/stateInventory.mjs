@@ -58,6 +58,7 @@ export const STABLE_STATE_INVENTORY = inventory({
   serverEvent: entry("ephemeral", "live event serialization function"),
   authFails: entry("ephemeral", "short-lived authentication throttle buckets"),
   oauthFlows: entry("ephemeral", "bounded transient OAuth callbacks, prompts, and timers"),
+  loops: entry("ephemeral", "running plan loops keyed by working tree; a restart ends them"),
   pinnedWidgetTranscodes: entry("ephemeral", "in-flight browser-video conversion promises"),
 
   hublotSupervisor: entry("ephemeral", "live supervisor and timer"),

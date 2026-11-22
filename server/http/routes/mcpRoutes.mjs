@@ -14,13 +14,14 @@ const HTTP_BAD_REQUEST = 400;
 const MAX_TCP_PORT = 65535;
 const ROUTINE_LOG_TAIL_COUNT_NEGATIVE_SLICE = -10;
 const PINNED_WIDGETS_ROUTE = "/pinned-widgets";
+const LOOP_KEEPALIVE_MS = 25_000;
 
 
 /**
  * MCP endpoint served by the Oyster process itself (Streamable HTTP, stateless).
  *
  * It exposes the Oyster tools bundled as pi extensions — hublot, pinned_widget,
- * group_pinned_widgets, routine — plus a sudo-capable bash tool to MCP-capable
+ * group_pinned_widgets, routine, loop — plus a sudo-capable bash tool to MCP-capable
  * harnesses such as Claude Code. Each request identifies its runner, session,
  * and workspace through URL parameters, so nothing about the caller lives in
  * process-level configuration: `POST /mcp?runner=…&session=…&workdir=…`.
@@ -184,9 +185,10 @@ import { progressionWarnings } from "../../routine-progress-policy.mjs";
  * Build one MCP server bound to a request context.
  *
  * @param {{ runnerId: string | null, sessionId: string | null, workdir: string }} context
- * @param {{ dispatch: Function, spawnImpl?: Function }} deps `dispatch(method, path, body, { signal })` → `{ status, data }`
+ * @param {{ dispatch: Function, spawnImpl?: Function, loops?: { validate: Function, run: Function } | null }} deps
+ *   `dispatch(method, path, body, { signal })` → `{ status, data }`; `loops` is the server's loop service
  */
-export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) {
+export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn, loops = null }) {
   if (typeof dispatch !== "function") throw new TypeError("MCP server dispatch must be a function");
   const { runnerId, sessionId, workdir } = context;
 
@@ -411,6 +413,43 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn }) 
     return text(routineToolMessage(action, routine, progressionNotes), { ...routine, progressionWarnings: progressionNotes });
   });
 
+  server.registerTool("loop", {
+    title: "Loop",
+    description:
+      "Execute a Markdown checklist plan sequentially and autonomously. Each unchecked item runs in a fresh isolated subagent " +
+      "that receives only that step (with its nested detail and section notes) and a short handoff from the previous step, never the whole plan. " +
+      "An executable validation script then decides whether the item is checked off and committed; a failed step is retried with the tail of its failure log. " +
+      "The call returns when every item is checked, or when one step fails to advance for 20 consecutive iterations. " +
+      "Write each checklist item so it is self-contained, with step-specific detail indented beneath it and shared constraints as prose under the plan's headings.",
+    inputSchema: {
+      planPath: z.string().describe("Path to the Markdown checklist plan, relative to the session workdir or absolute"),
+      validationScript: z.string().describe("Path to an executable validation script, relative to the session workdir or absolute"),
+    },
+  }, async ({ planPath, validationScript }, extra) => {
+    if (!loops) throw new Error("loops are unavailable on this Oyster server");
+    const inputs = loops.validate({ planPath, validationScript, dir: workdir, parentSessionId: requireSession() });
+    const progressToken = extra._meta?.progressToken;
+    let progress = 0;
+    let latest = "Loop starting…";
+    // Progress doubles as a keepalive: an iteration can stay silent for many minutes.
+    const notify = () => {
+      if (progressToken === undefined) return;
+      progress += 1;
+      void extra.sendNotification({ method: "notifications/progress", params: { progressToken, progress, message: latest } }).catch(() => {});
+    };
+    const keepalive = setInterval(notify, LOOP_KEEPALIVE_MS);
+    keepalive.unref?.();
+    try {
+      const { message, results, ...summary } = await loops.run(inputs, {
+        signal: extra.signal,
+        onProgress: (event) => { latest = event.message; notify(); },
+      });
+      return { ...text(message, { ...summary, results }), isError: !summary.complete };
+    } finally {
+      clearInterval(keepalive);
+    }
+  });
+
   return server;
 }
 
@@ -422,9 +461,9 @@ function requestParameter(url, name) {
 /**
  * Routes for the in-process MCP endpoint.
  *
- * @param {{ state: object, requestContext: { json: Function }, dispatch: Function, spawnImpl?: Function }} deps
+ * @param {{ state: object, requestContext: { json: Function }, dispatch: Function, spawnImpl?: Function, loops?: object | null }} deps
  */
-export function createMcpRoutes({ state, requestContext, dispatch, spawnImpl = spawn }) {
+export function createMcpRoutes({ state, requestContext, dispatch, spawnImpl = spawn, loops = null }) {
   if (!state || typeof state !== "object") throw new TypeError("MCP routes require server state");
   if (typeof requestContext?.json !== "function") throw new TypeError("MCP routes require the request context");
   if (typeof dispatch !== "function") throw new TypeError("MCP routes require an in-process dispatch function");
@@ -447,7 +486,7 @@ export function createMcpRoutes({ state, requestContext, dispatch, spawnImpl = s
         workdir: resolve(workdir ?? state.currentDir ?? state.config?.PI_DIR ?? process.cwd()),
       };
       // Stateless mode: one server and transport per request, torn down with the response.
-      const server = createOysterMcpServer(context, { dispatch, spawnImpl });
+      const server = createOysterMcpServer(context, { dispatch, spawnImpl, loops });
       const additionalTools = await activeRunner?.[RUNNER_MCP]?.tools() ?? [];
       for (const tool of additionalTools) {
         server.registerTool(tool.name, {

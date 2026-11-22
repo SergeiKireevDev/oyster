@@ -6,7 +6,7 @@ description: How a Claude Code session discovers and uses Oyster's built-in MCP 
 Oyster serves its own tools to MCP-capable harnesses from the UI server at
 `POST /mcp`. pi keeps using the bundled extensions in `extensions/`; Claude
 Code reaches the same capabilities (`hublot`, `pinned_widget`,
-`group_pinned_widgets`, `routine`, and a sudo-capable `bash`) through this
+`group_pinned_widgets`, `routine`, `loop`, and a sudo-capable `bash`) through this
 endpoint. Nothing is installed or registered on the machine for that to work:
 every Claude Code process is told where the endpoint is when Oyster launches it.
 
@@ -18,7 +18,7 @@ every Claude Code process is told where the endpoint is when Oyster launches it.
    environment, and connects to the `oyster` server it describes: an `http`
    server whose URL is Oyster's own `/mcp` route.
 3. Claude Code sends the MCP `initialize` handshake and `tools/list`. Oyster
-   answers with the five tools, which appear to the model as
+   answers with the six tools, which appear to the model as
    `mcp__oyster__bash`, `mcp__oyster__hublot`, and so on.
 4. Each tool call is one more `POST /mcp`. Oyster identifies the caller from the
    URL, runs the tool, and streams the result back.
@@ -82,6 +82,10 @@ check as the rest of the API, then:
    `server/http/internalDispatch.mjs`. Pinning a file runs the same code as the
    browser's `POST /pinned-widgets`; opening a hublot runs `POST /tunnels`.
    There is no loopback HTTP call and no second implementation of any tool.
+   `loop` is the one long-running tool: it calls the server's loop engine
+   (`server/loops.mjs`, the same one behind `POST /loops`) directly, so it can
+   report each phase as an MCP progress notification, repeated every 25
+   seconds to keep the call alive while an iteration works.
 
 The sudo flow adds one hop. `bash` with `sudo: true` posts to
 `POST /runner/ui-request?runner=<id>`, which pushes a masked `input` dialog to

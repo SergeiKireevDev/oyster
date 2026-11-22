@@ -29,7 +29,7 @@ test("pinned widget collections are indexed and sorted once outside render snipp
 
 test("session family grouping and loop sorting are prepared before template rendering", () => {
   const root = { sessionKey: "root", name: "Loop run" };
-  const second = { sessionKey: "second", parentSessionKey: "root", name: "Loop iteration 2: work" };
+  const second = { sessionKey: "second", parentSessionKey: "root", name: "↻2 work" };
   const first = { sessionKey: "first", parentSessionKey: "root", name: "Loop iteration 1: work" };
   assert.deepEqual(prepareSessionFamilies([root, second, first])[0], {
     session: root, forks: [first, second], loop: true,

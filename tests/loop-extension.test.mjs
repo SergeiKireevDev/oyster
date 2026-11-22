@@ -5,169 +5,56 @@ import { transform } from "esbuild";
 
 const source = readFileSync(new URL("../extensions/loop.ts", import.meta.url), "utf8");
 
-async function loadHelpers() {
-  const start = source.indexOf("// PURE_HELPERS_START");
-  const end = source.indexOf("// PURE_HELPERS_END");
-  assert.notEqual(start, -1);
-  assert.notEqual(end, -1);
-  const helpers = source.slice(start + "// PURE_HELPERS_START".length, end);
-  const snippet = `
-    const CONTEXT_OUTPUT_LIMIT = 50 * 1024;
-    interface ChecklistItem { line: number; checked: boolean; text: string; }
-    interface PreviousIteration { output: string; validationLog?: string; succeeded: boolean; }
-    ${helpers}
-    export { checklistItems, firstUncheckedItem, checkItem, commitMessage, buildIterationPrompt };
-  `;
-  const { code } = await transform(snippet, { loader: "ts", format: "esm", target: "es2022" });
-  return import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
-}
-
 async function loadStreamHelper() {
-  const start = source.indexOf("async function readSubagentStream");
-  const end = source.indexOf("async function runSubagent", start);
+  const start = source.indexOf("async function readLoopStream");
+  const end = source.indexOf("async function runLoop", start);
   assert.notEqual(start, -1);
   assert.notEqual(end, -1);
   const snippet = `
-    interface SubagentResult { ok?: boolean; output?: string; errorLog?: string; error?: string; }
+    interface LoopResult { complete?: boolean; reason?: string; message?: string; error?: string; [key: string]: unknown; }
+    type LoopEvent = LoopResult & { type?: string };
     ${source.slice(start, end)}
-    export { readSubagentStream };
+    export { readLoopStream };
   `;
   const { code } = await transform(snippet, { loader: "ts", format: "esm", target: "es2022" });
   return import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
 }
 
-test("loop parses split NDJSON subagent events through terminal completion", async () => {
-  const { readSubagentStream } = await loadStreamHelper();
+test("loop extension reads split NDJSON progress through terminal completion", async () => {
+  const { readLoopStream } = await loadStreamHelper();
   const encoder = new TextEncoder();
   const response = new Response(new ReadableStream({
     start(controller) {
-      controller.enqueue(encoder.encode('{"type":"started"}\n{"type":"heart'));
-      controller.enqueue(encoder.encode('beat"}\n{"type":"complete","ok":true,"output":"done"}\n'));
+      controller.enqueue(encoder.encode('{"type":"started"}\n{"type":"progress","mess'));
+      controller.enqueue(encoder.encode('age":"Iteration 1"}\n{"type":"heartbeat"}\n{"type":"complete","complete":true,"message":"done"}\n'));
       controller.close();
     },
   }));
-  assert.deepEqual(await readSubagentStream(response), { type: "complete", ok: true, output: "done" });
+  const progress = [];
+  assert.deepEqual(await readLoopStream(response, (event) => progress.push(event.message)), { type: "complete", complete: true, message: "done" });
+  assert.deepEqual(progress, ["Iteration 1"]);
 });
 
-test("loop parses Markdown checklists and checks exactly the selected item", async () => {
-  const { checklistItems, firstUncheckedItem, checkItem } = await loadHelpers();
-  const plan = "# Plan\n\n- [x] done\n- [ ] first\n1. [ ] second\n";
-  assert.deepEqual(checklistItems(plan).map(({ checked, text }) => ({ checked, text })), [
-    { checked: true, text: "done" },
-    { checked: false, text: "first" },
-    { checked: false, text: "second" },
-  ]);
-  const target = firstUncheckedItem(plan);
-  assert.equal(target.text, "first");
-  assert.equal(checkItem(plan, target), "# Plan\n\n- [x] done\n- [x] first\n1. [ ] second\n");
+test("loop extension rejects a stream that ends without completion", async () => {
+  const { readLoopStream } = await loadStreamHelper();
+  const response = new Response('{"type":"progress","message":"x"}\n');
+  await assert.rejects(readLoopStream(response, () => {}), /ended without a completion event/);
 });
 
-test("loop normalizes generated commit titles and bullet-point bodies", async () => {
-  const { commitMessage } = await loadHelpers();
-  assert.deepEqual(
-    commitMessage('Title: "Handle failed job retries"\n\nSummary:\n* Preserve retry state\n2. Cover failures', "fallback"),
-    { title: "Handle failed job retries", body: "- Preserve retry state\n- Cover failures" },
-  );
-  assert.deepEqual(commitMessage("", "  Add   retry handling\nfor failed jobs  "), {
-    title: "Add retry handling for failed jobs",
-    body: "",
-  });
-  assert.equal(commitMessage("x".repeat(100), "fallback").title, "x".repeat(72));
-});
-
-test("loop first iteration context contains only instructions and plan", async () => {
-  const { buildIterationPrompt } = await loadHelpers();
-  const prompt = buildIterationPrompt("- [ ] implement it");
-  assert.match(prompt, /# Plan\n\n- \[ \] implement it/);
-  assert.match(prompt, /state what you attempted, what succeeded, what failed/);
-  assert.match(prompt, /Do not create, amend, or otherwise modify Git commits/);
-  assert.match(prompt, /parent loop owns validation and commits only after validation passes/);
-  assert.doesNotMatch(prompt, /Previous iteration output|Previous iteration failure log/);
-});
-
-test("loop successful follow-up context contains checked plan and prior output", async () => {
-  const { buildIterationPrompt } = await loadHelpers();
-  const prompt = buildIterationPrompt("- [x] first\n- [ ] second", {
-    succeeded: true,
-    output: "implemented first",
-  });
-  assert.match(prompt, /- \[x\] first\n- \[ \] second/);
-  assert.match(prompt, /# Previous iteration output\n\nimplemented first/);
-  assert.doesNotMatch(prompt, /Previous iteration failure log/);
-});
-
-test("loop failed follow-up context keeps item unchecked and includes failure details", async () => {
-  const { buildIterationPrompt } = await loadHelpers();
-  const prompt = buildIterationPrompt("- [x] first\n- [ ] second", {
-    succeeded: false,
-    output: "attempted second",
-    validationLog: "tests failed",
-  });
-  assert.match(prompt, /- \[x\] first\n- \[ \] second/);
-  assert.match(prompt, /# Previous iteration output\n\nattempted second/);
-  assert.match(prompt, /# Previous iteration failure log\n\ntests failed/);
-});
-
-test("loop registers the /loop command", () => {
+test("loop extension registers the /loop command and the loop tool", () => {
   assert.match(source, /pi\.registerCommand\("loop"/);
   assert.match(source, /\/loop <plan\.md> <executable-validation-script>/);
-  assert.doesNotMatch(source, /\[max-iterations\]|DEFAULT_MAX_ITERATIONS|maxIterations/);
   assert.match(source, /pi\.setSessionName\(`Loop: \$\{basename\(planPath\)\}`\)/);
-  assert.match(source, /await runLoop\(pi, ctx/);
+  assert.match(source, /pi\.registerTool\(\{\s*name: "loop"/);
+  assert.match(source, /never the whole plan/);
 });
 
-test("loop uses Oyster-managed persisted child runners and directly executes validation", () => {
-  assert.doesNotMatch(source, /"--no-session"/);
+test("loop extension is a thin client of the Oyster loop engine", () => {
   assert.match(source, /ctx\.sessionManager\.isPersisted\(\)/);
-  assert.match(source, /fetch\(`\$\{OYSTER_URL\}\/subagents`/);
+  assert.match(source, /fetch\(`\$\{OYSTER_URL\}\/loops`/);
   assert.match(source, /accept: "application\/x-ndjson"/);
-  assert.match(source, /await readSubagentStream\(response\)/);
-  assert.match(source, /stream ended without a completion event/);
-  assert.doesNotMatch(source, /const result = await response\.json/);
   assert.match(source, /parentSessionId: ctx\.sessionManager\.getSessionId\(\)/);
-  assert.match(source, /`Loop iteration \$\{iteration\}:/);
-  assert.doesNotMatch(source, /getPiInvocation|--mode", "json"/);
-  assert.match(source, /const headBefore = await currentGitHead\(pi, ctx, signal\)/);
-  assert.match(source, /pi\.exec\("git", \["reset", "--soft", expectedHead\]/);
-  assert.match(source, /subagent-created commit history was reset/i);
-  assert.match(source, /if \(!restoredHead\.ok\) \{[\s\S]*subagent\.ok = false/);
-  assert.match(source, /if \(subagent\.ok\) \{/);
-  assert.match(source, /validation = await runValidation/);
-  assert.match(source, /subagent failed; retrying/);
-  assert.match(source, /pi\.exec\(validationPath, \[\]/);
-  assert.match(source, /writeFileSync\(planPath, planBefore/);
-  assert.match(source, /validation\?\.ok === true/);
-  assert.match(source, /writeFileSync\(planPath, checkItem\(planBefore, item\)/);
-  assert.match(source, /await commitSuccessfulStep\(pi, ctx, item\.text, subagent\.output, signal\)/);
-  assert.match(source, /pi\.exec\("git", \["add", "-A"\]/);
-  assert.match(source, /await generateCommitMessage\(pi, ctx, item, subagentOutput, signal\)/);
-  assert.match(source, /ctx\.modelRegistry\.getApiKeyAndHeaders\(ctx\.model\)/);
-  assert.match(source, /pi\.exec\("git", \["diff", "--cached"/);
-  assert.match(source, /await complete\(/);
-  assert.match(source, /title followed by concise bullet points summarizing the changes/);
-  assert.match(source, /imperative title must be at most 72 characters/);
-  assert.match(source, /body must contain only `- ` bullet points/);
-  assert.match(source, /const commitArgs = \["commit", "--allow-empty", "--no-gpg-sign", "-m", title\]/);
-  assert.match(source, /if \(body\) commitArgs\.push\("-m", body\)/);
-  assert.match(source, /pi\.exec\("git", commitArgs/);
-  assert.ok(
-    source.indexOf("const headBefore = await currentGitHead") < source.indexOf("const subagent = await runSubagent"),
-    "the loop must capture Git HEAD before a subagent can modify it",
-  );
-  assert.ok(
-    source.indexOf("const restoredHead = await restoreLoopOwnedHead") < source.indexOf("validation = await runValidation"),
-    "subagent-created commits must be unwound before validation",
-  );
-  assert.ok(
-    source.indexOf("validation = await runValidation") < source.indexOf("await commitSuccessfulStep"),
-    "validation must pass before a loop step is committed",
-  );
-});
-
-test("loop has no total iteration limit and stops after one step stalls 20 times", () => {
-  assert.match(source, /const MAX_STALLED_ITERATIONS = 20/);
-  assert.match(source, /for \(let iteration = 1; ; iteration \+= 1\)/);
-  assert.match(source, /if \(succeeded\) \{[\s\S]*stalledIterations = 0;[\s\S]*stalledIterations \+= 1/);
-  assert.match(source, /stalledIterations >= MAX_STALLED_ITERATIONS/);
-  assert.match(source, /failed to advance for \$\{MAX_STALLED_ITERATIONS\} consecutive iterations/);
+  assert.match(source, /dir: ctx\.cwd/);
+  // Plan parsing, subagents, validation, and Git all belong to server/loops.mjs.
+  assert.doesNotMatch(source, /pi\.exec|\/subagents|readFileSync|writeFileSync|buildIterationPrompt|complete\(/);
 });
