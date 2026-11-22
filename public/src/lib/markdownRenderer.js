@@ -104,7 +104,8 @@ function inlineMd(s, resolveImageSource) {
   let rendered = s
     .replace(/`([^`]+)`/g, (_, code) => protect(`<code>${code}</code>`))
     .replace(/\\\((.+?)\\\)/g, (_, expression) => protect(renderMath(expression)))
-    .replace(/(^|[^$\\])\$([^$\n]+?)\$(?!\$)/g, (_, prefix, expression) => `${prefix}${protect(renderMath(expression))}`)
+    // Only $$…$$ delimits dollar math; a lone $ is literal text (prices, shell vars).
+    .replace(/\$\$([^\n]+?)\$\$/g, (_, expression) => protect(renderMath(expression, true)))
     // Match images before links/emphasis so destinations and alt text remain
     // attributes, not generated markup. Code/math were protected above.
     .replace(/!\[([^\]\n]*)\]\(\s*(?:&lt;([^\n]*?)&gt;|([^\s()]+(?:\([^()\n]*\)[^\s()]*)*))\s*(?:&quot;([^\n]*?)&quot;|'([^'\n]*)')?\s*\)/g,
