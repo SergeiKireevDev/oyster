@@ -84,11 +84,25 @@ export const PINNED_ARTIFACT_SYSTEM_PROMPT = [
 // life — long enough to never kill an active-but-silent runner, short
 // enough to fade abandoned ones out.
 const MAX_ORPHAN_AGE_MS = SECONDS_PER_MINUTE * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND; // 1h
+// Every agent process, named or not, is stopped once it has done no work for
+// this long. Only the process goes away: the runner descriptor and its saved
+// session stay, and the next command sent to the runner starts it again.
+const IDLE_RUNNER_HOURS = 2;
+export const MAX_IDLE_RUNNER_MS = IDLE_RUNNER_HOURS * MAX_ORPHAN_AGE_MS;
+// Driver events that prove the agent is doing work. Responses to state and
+// health probes are deliberately absent: the watchdog would otherwise keep
+// every subscribed runner alive forever.
+const RUNNER_ACTIVITY_EVENTS = new Set([
+  "agent_start", "agent_end", "agent_settled", "message_start", "message_end",
+  "tool_execution_start", "tool_execution_end", "compaction_start", "compaction_end", "extension_ui_request",
+]);
+// Commands that only read runner state and therefore do not count as use.
+const PASSIVE_RUNNER_COMMANDS = new Set(["get_state", "get_messages", "get_available_models", "health_probe"]);
 const ORPHAN_REAP_INTERVAL_MS = ORPHAN_REAP_INTERVAL_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND; // 10 min
 
 export const RUNNER_EPHEMERAL_FIELDS = Object.freeze([
   "proc", "stdoutReader", "driverEmit", "driverRuntime", "busy", "resumeId", "resumeQueue", "resumeTimer", "startTimer",
-  "lastSpawnAt", "lastLineAt", "probeSentAt", "probeMisses", "watchdogOk",
+  "lastSpawnAt", "lastLineAt", "lastActivityAt", "probeSentAt", "probeMisses", "watchdogOk", "forkSource",
   "titleProcess", "titleSessionId", "titleLoadingSessionId", "initialArgs", "eventListeners", "subagentStatus",
   "pendingExtensionUiRequestIds",
 ]);
@@ -108,6 +122,8 @@ function initializeRunnerRuntime(descriptor) {
     startTimer: null,
     lastSpawnAt: 0,
     lastLineAt: 0,
+    lastActivityAt: 0,
+    forkSource: descriptor.forkSource ?? null,
     probeSentAt: null,
     probeMisses: 0,
     watchdogOk: false,
@@ -125,6 +141,9 @@ function initializeRunnerRuntime(descriptor) {
 
 function ensureRunnerRuntimeFields(runner) {
   const defaults = initializeRunnerRuntime({});
+  // A process started by an older module version has no activity clock. Start
+  // it now so a hot reload never counts hours of real work as idleness.
+  if (!("lastActivityAt" in runner)) runner.lastActivityAt = runner.proc ? Date.now() : 0;
   for (const field of RUNNER_EPHEMERAL_FIELDS) {
     if (!(field in runner)) runner[field] = field === "resumeQueue" || field === "initialArgs"
       ? []
@@ -245,8 +264,12 @@ export async function createRunnerManager(state, {
   onHarnessAuthFailure = null,
   runnerDriver: configuredRunnerDriver = null,
   runnerDrivers: configuredRunnerDrivers = null,
+  describeRunner = null,
+  maxIdleMs = MAX_IDLE_RUNNER_MS,
 } = {}) {
   validateRunnerManagerInputs({ state, guardCallback, setTimer, clearTimer, notifyRunnerEvent, onHarnessAuthFailure });
+  if (describeRunner !== null && typeof describeRunner !== "function") throw new TypeError("runner describer must be a function or null");
+  if (!Number.isFinite(maxIdleMs) || maxIdleMs <= 0) throw new RangeError("runner idle limit must be a positive finite number");
   if (appStore === undefined) appStore = state.appStore;
   const { serverEvent, sessionReferences } = state;
   const runnerRepository = appStore?.repositories?.runners ?? null;
@@ -281,7 +304,18 @@ export async function createRunnerManager(state, {
       busy: r.busy,
       alive: !!r.proc,
       ...(r.subagentStatus ? { subagentStatus: r.subagentStatus } : {}),
+      ...describedRunnerFields(r),
     };
+  }
+
+  /** Fields contributed by other domains (thread lineage). A failing describer never breaks runner listings. */
+  function describedRunnerFields(r) {
+    if (!describeRunner) return null;
+    try { return describeRunner(r) ?? null; }
+    catch (error) {
+      console.error(`[oyster] cannot describe runner ${r.id}: ${error?.message ?? error}`);
+      return null;
+    }
   }
 
   function listRunnerInfo() {
@@ -514,6 +548,8 @@ export async function createRunnerManager(state, {
     runner.sessionId = d.sessionId ?? runner.sessionId;
     runner.sessionName = d.sessionName ?? null;
     runner.sessionInitialized = transition.sessionInitialized;
+    // The fork exists once the harness reports the session; later launches resume it.
+    if (transition.sessionInitialized) runner.forkSource = null;
     if (transition.changed) {
       if (transition.provisionalReference && nextReference) {
         await appStore?.repositories?.sessions?.reidentify?.(transition.provisionalReference, nextReference);
@@ -556,6 +592,7 @@ export async function createRunnerManager(state, {
   /** Apply a canonical driver event to runner lifecycle and session metadata. */
   async function trackRunner(runner, msg) {
     if (!msg || typeof msg !== "object" || Array.isArray(msg)) return;
+    if (RUNNER_ACTIVITY_EVENTS.has(msg.type)) runner.lastActivityAt = Date.now();
     notifyTrackedEvent(runner, msg);
     await applyRunnerLifecycleEvent(runner, msg);
   }
@@ -595,7 +632,15 @@ export async function createRunnerManager(state, {
     throw new Error("runner ID generator repeatedly returned an existing ID");
   }
 
-  async function spawnRunner({ dir, harness = runnerDrivers.defaultId, sessionRef = null, autostart = true, initialArgs = [] }) {
+  /**
+   * `sessionInitialized: false` marks an identity the harness has not created
+   * yet; with `forkSource` the driver creates it as a fork of that session on
+   * first launch instead of starting an empty conversation.
+   */
+  async function spawnRunner({
+    dir, harness = runnerDrivers.defaultId, sessionRef = null, autostart = true, initialArgs = [],
+    sessionInitialized = true, forkSource = null,
+  }) {
     const selectedDriver = runnerDrivers.get(harness);
     const reference = sessionRef ? sessionReferences.validate(sessionRef) : null;
     if (reference && !selectedDriver.isSessionCompatible(reference)) {
@@ -613,6 +658,7 @@ export async function createRunnerManager(state, {
       lastStatus: autostart ? "starting" : "stopped",
       createdAt,
     });
+    if (!sessionInitialized) await runnerRepository?.update(id, { session_initialized: 0 });
     const runner = initializeRunnerRuntime({
       id,
       dir,
@@ -621,8 +667,10 @@ export async function createRunnerManager(state, {
       sessionFile: reference?.backend === "jsonl" ? reference.storagePath : null,
       sessionId: reference?.id ?? null,
       sessionName: null,
+      sessionInitialized: Boolean(sessionInitialized),
       startCount: 0,
       initialArgs: [...initialArgs],
+      forkSource,
     });
     state.runners.set(runner.id, runner);
     if (autostart) await startRunner(runner);
@@ -721,6 +769,7 @@ export async function createRunnerManager(state, {
     // code update lastLineAt, so only those are probed (watchdogOk)
     runner.watchdogOk = true;
     runner.lastLineAt = Date.now();
+    runner.lastActivityAt = runner.lastLineAt;
     runner.probeSentAt = null;
     runner.probeMisses = 0;
 
@@ -875,6 +924,7 @@ export async function createRunnerManager(state, {
     }
     if (!runner.proc && autostart) await startRunner(runner);
     if (!runner.proc) return false;
+    if (!PASSIVE_RUNNER_COMMANDS.has(obj.type)) runner.lastActivityAt = Date.now();
     if (runner.resumeId) {
       // a session resume is in flight; deliver after it completes
       (runner.resumeQueue ??= []).push(obj);
@@ -1020,20 +1070,35 @@ export async function createRunnerManager(state, {
   // worker — stop its process so it stops burning RAM and disappears from
   // the swipe carousel. Dead shells stay in the map for instant restart on
   // next command (opening the session alone leaves the shell dormant).
+  function idleRunnerExpired(runner, now) {
+    // A pending clarification is the agent waiting on the user, not idleness.
+    if (runner.pendingExtensionUiRequestIds?.size || runner.brokeredUiRequests?.size) return false;
+    return now - Math.max(runner.lastActivityAt ?? 0, runner.lastSpawnAt ?? 0) > maxIdleMs;
+  }
+
+  function reap(runner, reason) {
+    console.log(`[oyster] ${reason} in ${runner.dir}`);
+    return stopRunner(runner).catch((error) => console.error(`[oyster] cannot stop runner ${runner.id}: ${error?.message ?? error}`));
+  }
+
+  /** Stop idle and orphaned agent processes; resolves once every stop has been issued. */
   function reaperTick() {
     const now = Date.now();
+    const stops = [];
     for (const runner of state.runners.values()) {
       if (!runner.proc) continue; // already stopped
-      if (runner.sessionName) continue; // user actually talked to it
       if (runner.busy) continue; // never interrupt active work
+      if (idleRunnerExpired(runner, now)) {
+        stops.push(reap(runner, `stopping idle runner ${runner.id} (no work for ${Math.round(maxIdleMs / MILLISECONDS_PER_MINUTE)}min)`));
+        continue;
+      }
+      if (runner.sessionName) continue; // user actually talked to it
       // lastLineAt measures recent output, not process age. A noisy nameless
       // worker is still an orphan, so age it from the actual spawn time.
       if (now - runner.lastSpawnAt <= MAX_ORPHAN_AGE_MS) continue;
-      console.log(
-        `[oyster] reaping orphan runner ${runner.id} (alive ${Math.round((now - runner.lastSpawnAt) / MILLISECONDS_PER_MINUTE)}min, no session name) in ${runner.dir}`
-      );
-      stopRunner(runner);
+      stops.push(reap(runner, `reaping orphan runner ${runner.id} (alive ${Math.round((now - runner.lastSpawnAt) / MILLISECONDS_PER_MINUTE)}min, no session name)`));
     }
+    return Promise.all(stops);
   }
 
   clearInterval(state.runnerReaperTimer);
@@ -1049,6 +1114,7 @@ export async function createRunnerManager(state, {
   const stopPi = stopDrivers;
 
   return {
+    reapIdleRunners: reaperTick,
     srvId, runnerInfo, listRunnerInfo, replayRunnerEvents, runnersChanged,
     spawnRunner, startRunner, stopRunner, sendToRunner, requestRunnerUi, observeRunner, acknowledgeRunnerAttention,
     defaultRunner, runnerFromReq, openSessionRunner, updateRunnerSessionReference,

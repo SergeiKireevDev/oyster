@@ -1,4 +1,5 @@
-export function createPostSendTranscriptSyncController({ getRunner, getGeneration = () => 0, getSessionFile, fetchImpl, sessionFileQuery, userMessageText, renderTranscript, onPage = () => {}, log = () => {}, now = Date.now, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
+/** `shouldDefer` holds the re-render back while it would drop the reader's text selection; polling continues meanwhile. */
+export function createPostSendTranscriptSyncController({ getRunner, getGeneration = () => 0, getSessionFile, fetchImpl, sessionFileQuery, userMessageText, renderTranscript, shouldDefer = () => false, onPage = () => {}, log = () => {}, now = Date.now, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout }) {
   let timer = null;
   function schedule(expectedUserText) {
     clearTimeoutImpl(timer);
@@ -24,7 +25,7 @@ export function createPostSendTranscriptSyncController({ getRunner, getGeneratio
             onPage(data, sessionFile);
             const user = messages.some((m) => m.role === 'user' && userMessageText(m) === expectedUserText);
             const assistant = user && messages.some((m, i) => m.role === 'assistant' && messages.slice(0, i).some((p) => p.role === 'user' && userMessageText(p) === expectedUserText));
-            if (assistant) return renderTranscript(messages);
+            if (assistant && !shouldDefer()) return renderTranscript(messages);
           }
         }
       } catch {}

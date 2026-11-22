@@ -34,6 +34,7 @@ export function createTranscriptRuntime(deps) {
     flash,
     focusMessageBySnippet,
     annotateTranscriptEntries: permalink.annotate,
+    resolveEntryId: permalink.resolveEntryId,
     copyPermalink: permalink.copyPermalink,
     focusEntryById: permalink.focusEntryById,
     teardown: () => feature.teardown(),

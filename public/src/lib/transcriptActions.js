@@ -71,7 +71,10 @@ export function createTranscriptActions({ callbacks, shouldShowThinking, assista
 
   function addAssistant(message, role = "assistant", { prepend = false } = {}) {
     const assistantStore = writable(assistantModel(message));
-    const item = makeItem({ kind: "assistant", assistantStore, role, timestamp: message.entryTimestamp ?? message.timestamp, ...callbacks });
+    const item = makeItem({
+      kind: "assistant", assistantStore, role, timestamp: message.entryTimestamp ?? message.timestamp,
+      entryId: message.entryId ?? null, inherited: message.inherited === true, ...callbacks,
+    });
     insert([item], prepend);
     return { item, store: assistantStore, msg: message, svelte: true };
   }
@@ -79,17 +82,18 @@ export function createTranscriptActions({ callbacks, shouldShowThinking, assista
   function updateAssistant(live, message) {
     live.msg = message;
     live.item.timestamp = message.entryTimestamp ?? message.timestamp ?? live.item.timestamp;
+    live.item.entryId = message.entryId ?? live.item.entryId;
     live.store.set(assistantModel(message));
   }
 
-  function addUser(text, { prepend = false, timestamp = Date.now() } = {}) {
-    const item = makeItem({ kind: "user", text, timestamp, ...callbacks });
+  function addUser(text, { prepend = false, timestamp = Date.now(), entryId = null, inherited = false } = {}) {
+    const item = makeItem({ kind: "user", text, timestamp, entryId, inherited, ...callbacks });
     insert([item], prepend);
     return item;
   }
 
   function addCompaction(message, { prepend = false } = {}) {
-    const item = makeItem({ kind: "compaction", tokensBefore: message.tokensBefore ?? 0, timestamp: message.timestamp });
+    const item = makeItem({ kind: "compaction", tokensBefore: message.tokensBefore ?? 0, timestamp: message.timestamp, inherited: message.inherited === true });
     insert([item], prepend);
     return item;
   }

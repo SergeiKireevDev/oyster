@@ -6,6 +6,8 @@ const HARNESSES = new Set(["codex", "gemini", "amp", "antigravity"]);
 /** Append canonical native-driver messages through Pi's SQLite repository.
  * Entry IDs are allocated by the driver before queuing, making retries idempotent.
  * Native IDs are retained for CLI resume; metadata guards against cross-harness collisions.
+ * A batch carrying `forkFrom` belongs to a thread: its transcript is created as a copy of the
+ * source session up to `forkFrom.entryId`, mirroring the fork the native CLI performed.
  */
 export function createNativeTranscriptSink({ sqlitePath, piBin, repositoryFactory = defaultRepositoryFactory } = {}) {
   if (typeof sqlitePath !== "string" || !sqlitePath) throw new TypeError("SQLite path is required");
@@ -14,14 +16,30 @@ export function createNativeTranscriptSink({ sqlitePath, piBin, repositoryFactor
   let repositoryPromise;
   const repository = () => repositoryPromise ??= Promise.resolve(repositoryFactory({ sqlitePath: databasePath, piBin }));
 
-  async function append({ harness, sessionId, cwd, name, entries }) {
+  async function createSession(repo, { harness, sessionId, cwd, forkFrom }) {
+    const metadata = { harness, externalSessionId: sessionId };
+    if (forkFrom?.sessionId && typeof repo.fork === "function") {
+      try {
+        return await repo.fork(forkFrom.sessionId, {
+          id: sessionId, cwd, metadata,
+          ...(forkFrom.entryId ? { entryId: forkFrom.entryId, position: "at" } : {}),
+        });
+      } catch (error) {
+        // Losing the inherited history is better than losing the thread's own messages.
+        console.error(`[oyster] cannot copy ${forkFrom.sessionId} into forked transcript ${sessionId}: ${error?.message ?? error}`);
+      }
+    }
+    return repo.create({ id: sessionId, cwd, metadata });
+  }
+
+  async function append({ harness, sessionId, cwd, name, entries, forkFrom = null }) {
     const repo = await repository();
     let session;
     try {
       try { session = await repo.openById(sessionId); }
       catch (error) {
         if (error?.code !== "not_found" && !/not found/i.test(String(error?.message))) throw error;
-        session = await repo.create({ id: sessionId, cwd, metadata: { harness, externalSessionId: sessionId } });
+        session = await createSession(repo, { harness, sessionId, cwd, forkFrom });
       }
       const metadata = await session.getMetadata();
       if (metadata.metadata?.harness !== harness || metadata.metadata?.externalSessionId !== sessionId) {

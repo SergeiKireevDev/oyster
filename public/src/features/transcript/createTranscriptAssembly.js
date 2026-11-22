@@ -38,6 +38,13 @@ export function createTranscriptAssembly(deps) {
   let mounted = true;
   const detachLoadEarlier = deps.uiActions?.register(TRANSCRIPT_LOAD_EARLIER_ACTION, () => synchronization?.loadEarlier()) ?? (() => {});
 
+  // Background re-renders replace the transcript's nodes; hold them while the reader has text
+  // selected in it (to copy it, or to open a thread about it).
+  function readerIsSelecting() {
+    const selection = messagesElement.ownerDocument?.getSelection?.();
+    return Boolean(selection && !selection.isCollapsed && selection.anchorNode && messagesElement.contains(selection.anchorNode));
+  }
+
   const transcriptActions = createTranscriptActions({
     callbacks: {
       onPermalink: (element) => deps.copyPermalink(element).catch((error) => deps.toast(`permalink failed: ${error.message}`, "error")),
@@ -64,7 +71,10 @@ export function createTranscriptAssembly(deps) {
 
   function addUserMessage(message, options = {}) {
     const text = userMessageText(message);
-    transcriptActions.addUser(text, { ...options, timestamp: message.entryTimestamp ?? message.timestamp ?? Date.now() });
+    transcriptActions.addUser(text, {
+      ...options, timestamp: message.entryTimestamp ?? message.timestamp ?? Date.now(),
+      entryId: message.entryId ?? null, inherited: message.inherited === true,
+    });
     if (/^Opening interface: /.test(text)) {
       transcriptScroll.scrollToBottom(true);
       return;
@@ -174,7 +184,10 @@ export function createTranscriptAssembly(deps) {
     const applyHistoryPage = (result, identity) => {
       historyCursor = result?.page?.before ?? null;
       historyIdentity = identity ?? null;
-      setTranscriptHistory({ hasMore: historyCursor !== null, loading: false });
+      setTranscriptHistory({
+        hasMore: historyCursor !== null, loading: false,
+        threadStart: Boolean(result?.page?.threadStart), inherited: result?.thread?.boundary ?? 0,
+      });
     };
     const loadEarlier = async () => {
       if (historyLoading || historyCursor === null || !historyIdentity) return false;
@@ -236,6 +249,7 @@ export function createTranscriptAssembly(deps) {
       isReplaying: syncDeps.isReplaying,
       hasRunner: syncDeps.hasRunner,
       reload: reloadTranscript,
+      shouldDefer: readerIsSelecting,
       onError: syncDeps.onSyncError,
       setTimeoutImpl: syncDeps.setTimeoutImpl,
       clearTimeoutImpl: syncDeps.clearTimeoutImpl,
@@ -257,6 +271,7 @@ export function createTranscriptAssembly(deps) {
       sessionFileQuery: syncDeps.sessionFileQuery,
       userMessageText,
       renderTranscript,
+      shouldDefer: readerIsSelecting,
       onPage: applyHistoryPage,
       log: syncDeps.logPostSend,
       setTimeoutImpl: syncDeps.setTimeoutImpl,
@@ -329,6 +344,7 @@ export function createTranscriptAssembly(deps) {
     schedulePostSendFileTranscriptSync: (...args) => synchronization.schedulePostSendFileTranscriptSync(...args),
     composerReadyForSend: (...args) => deps.composerReadyForSend(...args),
     annotateTranscriptEntries: (...args) => permalinkOperations.annotateTranscriptEntries(...args),
+    resolveEntryId: (...args) => permalinkOperations.resolveEntryId(...args),
     copyPermalink: (...args) => permalinkOperations.copyPermalink(...args),
     focusEntryById: (...args) => permalinkOperations.focusEntryById(...args),
   };

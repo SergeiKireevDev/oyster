@@ -4,6 +4,7 @@
   import SessionSidebar from "./SessionSidebar.svelte";
   import Sidebars from "./Sidebars.svelte";
   import Transcript from "./Transcript.svelte";
+  import ThreadSelectionToolbar from "./threads/ThreadSelectionToolbar.svelte";
   import { clearTranscriptNotice, transcriptNotice } from "../stores/transcriptNotice.js";
   import { transcriptHistory } from "../stores/transcriptHistory.js";
   import { createFrameScheduler } from "../lib/frameScheduler.js";
@@ -27,7 +28,8 @@
 
   const scrollTracking = createFrameScheduler((node) => {
     if (isNearNewest(node)) clearTranscriptNotice();
-    if (node.scrollTop <= HISTORY_LOAD_THRESHOLD_PX && $transcriptHistory.hasMore && !$transcriptHistory.loading) {
+    // A thread's inherited context is opened from its header, never by scrolling into it.
+    if (node.scrollTop <= HISTORY_LOAD_THRESHOLD_PX && $transcriptHistory.hasMore && !$transcriptHistory.loading && !$transcriptHistory.threadStart) {
       uiActions.invoke(TRANSCRIPT_LOAD_EARLIER_ACTION);
     }
   });
@@ -44,6 +46,7 @@
   <main id="chatcol">
     <section class="transcript-shell" aria-label="Conversation transcript">
       <div id="scroller" bind:this={scroller} onscroll={trackScroll}><Transcript /></div>
+      <ThreadSelectionToolbar {scroller} />
       {#if $transcriptNotice}
         <button
           id="transcriptNotice"

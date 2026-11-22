@@ -16,6 +16,7 @@ const repositoryProbes = {
   runnerEvents: "list",
   runners: "list",
   sessions: "find",
+  threads: "list",
 };
 
 function appStore(overrides = {}) {

@@ -117,6 +117,26 @@ function ensureRuntime(runner) {
   return runtime;
 }
 
+/** Arguments that create the session: a fork of `forkSource` when the runner was spawned as a thread. */
+function newSessionArgs(runner, sessionId) {
+  const source = runner.forkSource?.sessionId;
+  return source
+    ? ["--resume", source, "--fork-session", "--session-id", sessionId]
+    : ["--session-id", sessionId];
+}
+
+/**
+ * A thread starts on its parent's model and effort; Claude Code stores neither
+ * per session. The effort goes through `selectedEffort`, so it also survives
+ * later relaunches of the thread.
+ */
+function forkModelArgs(runner, runtime) {
+  const { model, thinkingLevel } = runner.forkSource ?? {};
+  if (runtime.initialized) return [];
+  if (!runtime.selectedEffort && CLAUDE_EFFORT_LEVELS.includes(thinkingLevel)) runtime.selectedEffort = thinkingLevel;
+  return typeof model?.id === "string" && model.id.trim() ? ["--model", model.id.trim()] : [];
+}
+
 function stateFor(runner, runtime) {
   return {
     sessionId: runtime.sessionId ?? runner.sessionId ?? null,
@@ -364,6 +384,7 @@ export function createClaudeCodeDriver({
   return Object.freeze(validateRunnerDriver({
     id: CLAUDE_CODE_HARNESS,
     label: "Claude Code",
+    threadFork: "tip",
 
     isSessionCompatible(reference) {
       return !reference || reference.backend === CLAUDE_CODE_HARNESS || (Boolean(sqlitePath) && reference.backend === "sqlite");
@@ -373,18 +394,21 @@ export function createClaudeCodeDriver({
       const sessionId = runner.sessionRef?.id ?? runner.sessionId ?? randomUUID();
       const runtime = ensureRuntime(runner);
       runtime.sessionId = sessionId;
+      // First: a thread's inherited effort must be chosen before the arguments read it.
+      const forkArgs = forkModelArgs(runner, runtime);
       const args = [
         "--print", "--verbose",
         "--input-format", "stream-json",
         "--output-format", "stream-json",
         "--permission-mode", permissionMode,
-        ...(runtime.initialized ? ["--resume", sessionId] : ["--session-id", sessionId]),
+        ...(runtime.initialized ? ["--resume", sessionId] : newSessionArgs(runner, sessionId)),
         "--allowedTools", OYSTER_MCP_TOOLS,
         "--mcp-config", JSON.stringify(oysterMcpConfig({ runnerId: runner.id ?? null, sessionId, workdir: cwd, uiUrl: mcpUrl })),
         ...(systemPrompt ? ["--append-system-prompt", systemPrompt] : []),
         ...extraArgs,
         // After extraArgs: the level picked in Oyster overrides a configured default and survives relaunches.
         ...(runtime.selectedEffort ? ["--effort", runtime.selectedEffort] : []),
+        ...forkArgs,
       ];
       // OYSTER_TOKEN must exist for Claude Code's `${OYSTER_TOKEN}` header expansion,
       // even when the server runs unauthenticated.

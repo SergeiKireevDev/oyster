@@ -87,3 +87,10 @@ export const HEADER_CHOOSE_MODEL_ACTION = "header.chooseModel";
 export const HEADER_CHOOSE_THINKING_ACTION = "header.chooseThinking";
 export const HEADER_OPEN_CONFIG_ACTION = "header.openConfig";
 export const SETTINGS_CHANGED_ACTION = "settings.changed";
+
+export const THREAD_START_ACTION = "thread.start";
+export const THREAD_OPEN_ACTION = "thread.open";
+export const THREAD_NAVIGATE_ACTION = "thread.navigate";
+export const THREAD_DELETE_ACTION = "thread.delete";
+export const THREAD_TREE_OPEN_ACTION = "thread.openTree";
+export const THREAD_DRAFT_CANCEL_ACTION = "thread.cancelDraft";

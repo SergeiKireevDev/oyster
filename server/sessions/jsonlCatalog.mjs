@@ -472,7 +472,8 @@ export function transcriptMessage(entry) {
         ? Object.fromEntries(Object.entries(part).filter(([key]) => key !== "data"))
         : part)
       : message.content;
-    return { ...message, content, entryTimestamp: entry.timestamp ?? null };
+    // The entry id is the stable anchor threads and permalinks attach to.
+    return { ...message, content, entryTimestamp: entry.timestamp ?? null, ...(entry.id ? { entryId: entry.id } : {}) };
   }
   if (entry.type === "compaction") {
     return {

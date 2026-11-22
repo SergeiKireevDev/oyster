@@ -6,6 +6,19 @@ import { applyMigrations } from "./migrations.mjs";
 import { assertGeneralAppSettingKey, assertGeneralAppSettingValue } from "./appSettings.mjs";
 const INSERT_APP_SESSION_SQL = "INSERT INTO app_sessions(backend, session_id, storage_path, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING";
 const FIND_APP_SESSION_OWNER_SQL = "SELECT id FROM app_sessions WHERE backend = ? AND session_id = ? AND storage_path IS ?";
+const THREAD_OWNER_COLUMNS = Object.freeze(["session_owner_id", "parent_owner_id", "root_owner_id"]);
+// Every thread row is returned with the three session identities it links, so
+// callers never resolve owner ids themselves.
+const THREAD_SELECT_SQL = `
+  SELECT t.id, t.session_owner_id, t.parent_owner_id, t.root_owner_id, t.anchor_entry_id, t.fork_entry_id,
+    t.fork_mode, t.quote, t.question, t.label, t.prompt, t.prompt_ordinal, t.inherited_messages, t.created_at,
+    s.backend AS session_backend, s.session_id AS session_id, s.storage_path AS session_storage_path, s.archived AS session_archived,
+    p.backend AS parent_backend, p.session_id AS parent_session_id, p.storage_path AS parent_storage_path,
+    r.backend AS root_backend, r.session_id AS root_session_id, r.storage_path AS root_storage_path
+  FROM threads t
+  JOIN app_sessions s ON s.id = t.session_owner_id
+  JOIN app_sessions p ON p.id = t.parent_owner_id
+  JOIN app_sessions r ON r.id = t.root_owner_id`;
 
 function updateAssignments(entries) {
   return entries.map(([column]) => `${column} = ?`).join(", ");
@@ -178,6 +191,9 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
         if (target && target.id !== owner.id) {
           for (const table of ["operations", "checkpoints", "routines", "hublots", "runners", "pinned_widget_groups", "pinned_widgets"]) {
             await database.run(`UPDATE ${table} SET owner_id = ? WHERE owner_id = ?`, target.id, owner.id);
+          }
+          for (const column of THREAD_OWNER_COLUMNS) {
+            await database.run(`UPDATE threads SET ${column} = ? WHERE ${column} = ?`, target.id, owner.id);
           }
           await database.run("DELETE FROM app_sessions WHERE id = ?", owner.id);
         } else {
@@ -496,6 +512,31 @@ export async function openAppStore({ databasePath, Database = openSqliteDatabase
       },
       markDelivered: async (endpoint, deliveredAt) => (await database.run("UPDATE web_push_subscriptions SET last_delivered_at = ? WHERE endpoint = ?", deliveredAt, endpoint)).changes,
       deleteSubscription: async (endpoint) => (await database.run("DELETE FROM web_push_subscriptions WHERE endpoint = ?", endpoint)).changes,
+    }),
+    threads: Object.freeze({
+      list: async () => (await database.all(`${THREAD_SELECT_SQL} ORDER BY t.created_at, t.id`)).map((row) => ({ ...row })),
+      listForRoot: async (rootOwnerId) => (await database.all(`${THREAD_SELECT_SQL} WHERE t.root_owner_id = ? ORDER BY t.created_at, t.id`, rootOwnerId)).map((row) => ({ ...row })),
+      find: async (id) => {
+        const row = await database.get(`${THREAD_SELECT_SQL} WHERE t.id = ?`, id);
+        return row ? { ...row } : null;
+      },
+      findBySessionOwner: async (sessionOwnerId) => {
+        const row = await database.get(`${THREAD_SELECT_SQL} WHERE t.session_owner_id = ?`, sessionOwnerId);
+        return row ? { ...row } : null;
+      },
+      create: async ({
+        id, sessionOwnerId, parentOwnerId, rootOwnerId, anchorEntryId = null, forkEntryId = null,
+        forkMode, quote, question, label, prompt, promptOrdinal = 0, inheritedMessages = 0, createdAt,
+      }) => {
+        await database.run(`
+          INSERT INTO threads(
+            id, session_owner_id, parent_owner_id, root_owner_id, anchor_entry_id, fork_entry_id,
+            fork_mode, quote, question, label, prompt, prompt_ordinal, inherited_messages, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, id, sessionOwnerId, parentOwnerId, rootOwnerId, anchorEntryId, forkEntryId, forkMode, quote, question, label, prompt, promptOrdinal, inheritedMessages, createdAt);
+        return rawRepositories.threads.find(id);
+      },
+      delete: async (id) => (await database.run("DELETE FROM threads WHERE id = ?", id)).changes,
     }),
     runners: Object.freeze({
       list: async () => (await database.all("SELECT * FROM runners ORDER BY created_at, id")).map((row) => ({ ...row })),

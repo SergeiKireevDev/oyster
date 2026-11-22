@@ -63,7 +63,8 @@ export function createRunnerListController({ updateAppSession }) {
 export function groupSessionSearchResults(results) {
   const groups = new Map();
   for (const hit of results) {
-    const identity = hit.sessionKey ?? hit.sessionPath;
+    // Hits inside a thread are listed with the session the thread belongs to.
+    const identity = hit.thread?.rootSessionKey ?? hit.sessionKey ?? hit.sessionPath;
     if (!groups.has(identity)) groups.set(identity, []);
     groups.get(identity).push(hit);
   }
@@ -116,7 +117,8 @@ export function parseSessionRoute(pathname) {
 
 export function syncSessionUrl({ location, history, sessionId }) {
   const path = sessionId ? `/s/${encodeURIComponent(sessionId)}` : "/";
-  if (location.pathname !== path) history.replaceState(null, "", path);
+  // Keep the entry's state: thread navigation and modals mark their history entries with it.
+  if (location.pathname !== path) history.replaceState(history.state ?? null, "", path);
 }
 
 /** Return runner metadata after a process has been stopped. */
@@ -286,7 +288,8 @@ export function createSessionOpenController({ open, onOpened = () => {}, getCurr
 
 /** Switch to a search hit's session before focusing its transcript entry. */
 export function adjacentActiveRunner(runners, currentRunner, workdir, direction) {
-  const candidates = runners.filter((runner) => runner.alive && runner.sessionId && runner.sessionName && runner.dir === workdir);
+  // Threads are reached from their session, never by swiping between sessions.
+  const candidates = runners.filter((runner) => runner.alive && runner.sessionId && runner.sessionName && runner.dir === workdir && !runner.thread);
   if (candidates.length <= 1) return { candidates, target: null };
   const index = candidates.findIndex((runner) => runner.id === currentRunner);
   const base = index === -1 ? 0 : index;
@@ -314,7 +317,8 @@ export function createSearchHitSessionController({ close, getSessionId, open, ge
     if (hit.sessionId === getSessionId()) return focus(hit);
     try {
       const runner = await open({
-        ...sessionOpenSelection(sessionKey),
+        // A hit knows its own session; the group key may be the root of its thread.
+        ...sessionOpenSelection(hit.sessionKey ?? sessionKey),
         dir: hit.sessionCwd || null,
         workspaceId: hit.workspaceId || null,
       });

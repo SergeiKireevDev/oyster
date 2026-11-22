@@ -430,6 +430,34 @@ export const APP_MIGRATIONS = Object.freeze([
         CHECK (session_initialized IN (0, 1));
     `,
   }),
+  Object.freeze({
+    version: 20,
+    name: "threads",
+    // A thread is a forked session anchored to a quoted passage of its parent.
+    // Lineage lives here rather than in the agent store so every harness shares
+    // one model; deleting any session in the chain cascades to its thread rows.
+    sql: `
+      CREATE TABLE threads (
+        id TEXT PRIMARY KEY,
+        session_owner_id INTEGER NOT NULL UNIQUE REFERENCES app_sessions(id) ON DELETE CASCADE,
+        parent_owner_id INTEGER NOT NULL REFERENCES app_sessions(id) ON DELETE CASCADE,
+        root_owner_id INTEGER NOT NULL REFERENCES app_sessions(id) ON DELETE CASCADE,
+        anchor_entry_id TEXT,
+        fork_entry_id TEXT,
+        fork_mode TEXT NOT NULL CHECK (fork_mode IN ('entry', 'tip')),
+        quote TEXT NOT NULL,
+        question TEXT NOT NULL CHECK (question IN ('why', 'what', 'how', 'other')),
+        label TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        prompt_ordinal INTEGER NOT NULL DEFAULT 0 CHECK (prompt_ordinal >= 0),
+        inherited_messages INTEGER NOT NULL DEFAULT 0 CHECK (inherited_messages >= 0),
+        created_at TEXT NOT NULL,
+        CHECK (session_owner_id != parent_owner_id)
+      ) WITHOUT ROWID;
+      CREATE INDEX threads_parent_idx ON threads(parent_owner_id, created_at, id);
+      CREATE INDEX threads_root_idx ON threads(root_owner_id, created_at, id);
+    `,
+  }),
 ]);
 
 function validateMigrations(migrations) {

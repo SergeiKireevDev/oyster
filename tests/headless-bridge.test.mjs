@@ -89,6 +89,14 @@ test("Codex bridge builds new and resumed exec commands without putting the Oyst
   assert.ok(argv.includes("--dangerously-bypass-approvals-and-sandbox"));
   assert.equal(argv.includes("--sandbox"), false);
   assert.ok(argv.includes("thread-1"));
+
+  // A thread's first turn forks its parent session instead of starting or resuming one.
+  records = await bridgeRun(t, "codex", { prompt: "why?", sessionId: null, resume: false, fork: "parent-thread", model: "gpt-test" });
+  const forkArgv = records.find((record) => record.type === "fake.argv").argv;
+  assert.deepEqual(forkArgv.slice(0, 2), ["exec", "fork"]);
+  assert.deepEqual(forkArgv.slice(-2), ["parent-thread", "why?"]);
+  assert.ok(forkArgv.includes("--json"));
+  assert.equal(forkArgv[forkArgv.indexOf("--model") + 1], "gpt-test");
 });
 
 test("Gemini bridge creates a private MCP settings file and injects Oyster-managed Google OAuth", async (t) => {

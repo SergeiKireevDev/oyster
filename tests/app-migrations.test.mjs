@@ -32,9 +32,9 @@ test("numbered migrations apply once and report stable status", async (t) => {
   const second = await applyMigrations(database, { now });
 
   assert.equal(clockCalls, APP_MIGRATIONS.length);
-  assert.deepEqual(first, { currentVersion: 19, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19] });
+  assert.deepEqual(first, { currentVersion: 20, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20] });
   assert.deepEqual(second, first);
-  assert.deepEqual(tableNames(database), ["app_sessions", "app_settings", "checkpoints", "hublot_lifecycle_events", "hublot_processes", "hublots", "legacy_migration_ledger", "operations", "pinned_widget_groups", "pinned_widgets", "routine_log_lines", "routine_runs", "routines", "runner_events", "runners", "schema_migrations", "web_push_subscriptions", "web_push_vapid"]);
+  assert.deepEqual(tableNames(database), ["app_sessions", "app_settings", "checkpoints", "hublot_lifecycle_events", "hublot_processes", "hublots", "legacy_migration_ledger", "operations", "pinned_widget_groups", "pinned_widgets", "routine_log_lines", "routine_runs", "routines", "runner_events", "runners", "schema_migrations", "threads", "web_push_subscriptions", "web_push_vapid"]);
   assert.deepEqual(database.prepare("SELECT version, name, applied_at FROM schema_migrations").all().map((row) => ({ ...row })), [
     { version: 1, name: "foundation", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 2, name: "session_ownership", applied_at: "2026-07-16T00:00:00.000Z" },
@@ -55,6 +55,7 @@ test("numbered migrations apply once and report stable status", async (t) => {
     { version: 17, name: "runner_attention_status", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 18, name: "runner_harness", applied_at: "2026-07-16T00:00:00.000Z" },
     { version: 19, name: "runner_session_initialized", applied_at: "2026-07-16T00:00:00.000Z" },
+    { version: 20, name: "threads", applied_at: "2026-07-16T00:00:00.000Z" },
   ]);
 });
 
