@@ -8,6 +8,7 @@
   import { threadDraft, threadView } from "../stores/threads.js";
   import { composerHighlightSegments } from "../lib/composerHighlight.js";
   import { createFrameScheduler } from "../lib/frameScheduler.js";
+  import { usesTouchKeyboard } from "../lib/touchKeyboard.js";
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
     COMPOSER_ABORT_ACTION,
@@ -19,6 +20,8 @@
   } from "../runtime/uiActionNames.js";
 
   const uiActions = getUiActionRegistry();
+  // An on-screen keyboard shows a return key that breaks the line; sending is the Send button's job there.
+  const enterKeyHint = usesTouchKeyboard() ? "enter" : "send";
   let highlight;
   let aborting = false;
   const highlightScroll = createFrameScheduler((top, left) => {
@@ -114,7 +117,7 @@
         id="input"
         aria-label="Message"
         rows="1"
-        enterkeyhint="send"
+        enterkeyhint={enterKeyHint}
         {placeholder}
         disabled={$composerUi.inputDisabled}
         oninput={handleInput}

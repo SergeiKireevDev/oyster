@@ -138,7 +138,8 @@ export function createComposerAssembly(deps) {
 
   function keydown(event) {
     if (event.isComposing || commandRuntime?.isOpen()) return;
-    if (event.key === "Enter" && !event.shiftKey) {
+    // On an on-screen keyboard Enter is the only way to break a line: leave it to the field.
+    if (event.key === "Enter" && !event.shiftKey && !deps.enterBreaksLine?.()) {
       event.preventDefault();
       send();
       return;
