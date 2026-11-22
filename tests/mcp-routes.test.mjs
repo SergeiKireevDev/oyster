@@ -19,7 +19,7 @@ function workspace(t) {
 }
 
 /** Serve the MCP routes over real HTTP with a scripted in-process dispatch. */
-async function endpoint(t, { reply = () => ({ status: 500, data: { error: "unexpected route" } }), spawnImpl, state = { currentDir: "/tmp" } } = {}) {
+async function endpoint(t, { reply = () => ({ status: 500, data: { error: "unexpected route" } }), spawnImpl, loops, state = { currentDir: "/tmp" } } = {}) {
   const calls = [];
   const routes = createMcpRoutes({
     state,
@@ -32,6 +32,7 @@ async function endpoint(t, { reply = () => ({ status: 500, data: { error: "unexp
       return reply(call);
     },
     ...(spawnImpl ? { spawnImpl } : {}),
+    ...(loops ? { loops } : {}),
   });
   const server = createServer((req, res) => {
     const url = new URL(req.url, "http://localhost");
@@ -57,7 +58,7 @@ test("MCP endpoint exposes the bundled Oyster tools with a sudo-capable bash", a
   const { port } = await endpoint(t);
   const client = await connect(t, port, { session: "s-9", workdir: workspace(t) });
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((tool) => tool.name).sort(), ["bash", "group_pinned_widgets", "hublot", "pinned_widget", "routine"]);
+  assert.deepEqual(tools.map((tool) => tool.name).sort(), ["bash", "group_pinned_widgets", "hublot", "loop", "pinned_widget", "routine"]);
   const bash = tools.find((tool) => tool.name === "bash");
   assert.deepEqual(Object.keys(bash.inputSchema.properties).sort(), ["command", "sudo", "timeout"]);
   assert.match(bash.description, /sudo=true/);
@@ -318,4 +319,46 @@ test("MCP proxy preserves conditional JSON schemas and forwards all arguments", 
   assert.ok(tools.some((tool) => tool.name === "bash"));
   await client.callTool({ name: "mcp_conditional", arguments: { mode: "required", value: "kept", extra: 42 } });
   assert.deepEqual(received, { mode: "required", value: "kept", extra: 42 });
+});
+
+test("loop tool runs the server loop engine for the calling session and reports progress", async (t) => {
+  const dir = workspace(t);
+  const seen = {};
+  const loops = {
+    validate: (params) => { seen.params = params; return { ...params, validated: true }; },
+    run: async (inputs, { onProgress }) => {
+      seen.inputs = inputs;
+      onProgress({ phase: "subagent", message: "Iteration 1 (step 1/2): running subagent…" });
+      return { complete: true, reason: "complete", iterations: 2, steps: { done: 2, total: 2 }, results: [{ iteration: 1, item: "a", succeeded: true }], message: "Loop complete after 2 iterations." };
+    },
+  };
+  const { port } = await endpoint(t, { loops });
+  const client = await connect(t, port, { session: "s-loop", workdir: dir });
+  const progress = [];
+  const result = await client.callTool(
+    { name: "loop", arguments: { planPath: "PLAN.md", validationScript: "./validate.sh" } },
+    undefined,
+    { onprogress: (event) => progress.push(event.message) },
+  );
+  assert.deepEqual(seen.params, { planPath: "PLAN.md", validationScript: "./validate.sh", dir, parentSessionId: "s-loop" });
+  assert.equal(seen.inputs.validated, true);
+  assert.equal(result.isError, false);
+  assert.equal(result.content[0].text, "Loop complete after 2 iterations.");
+  assert.deepEqual(result.structuredContent.steps, { done: 2, total: 2 });
+  assert.equal(result.structuredContent.message, undefined);
+  assert.deepEqual(progress, ["Iteration 1 (step 1/2): running subagent…"]);
+});
+
+test("loop tool reports a stalled loop as an error and needs the loop service", async (t) => {
+  const stalled = await endpoint(t, { loops: { validate: (params) => params, run: async () => ({ complete: false, reason: "stalled", results: [], message: "Loop stopped." }) } });
+  const client = await connect(t, stalled.port, { session: "s-loop", workdir: workspace(t) });
+  const result = await client.callTool({ name: "loop", arguments: { planPath: "PLAN.md", validationScript: "./validate.sh" } });
+  assert.equal(result.isError, true);
+  assert.equal(result.content[0].text, "Loop stopped.");
+
+  const without = await endpoint(t);
+  const bare = await connect(t, without.port, { session: "s-loop", workdir: workspace(t) });
+  const unavailable = await bare.callTool({ name: "loop", arguments: { planPath: "PLAN.md", validationScript: "./validate.sh" } });
+  assert.equal(unavailable.isError, true);
+  assert.match(unavailable.content[0].text, /loops are unavailable/);
 });

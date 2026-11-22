@@ -2,14 +2,12 @@ import { runnerHasSessionIdentity } from "../../session-references.mjs";
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
 import { normalizeLastEventId, sseDataFrame } from "../../sse.mjs";
-const MILLISECONDS_PER_SECOND = 1000;
 const BYTES_PER_KIBIBYTE = 1024;
 const HTTP_OK = 200;
 const HTTP_ACCEPTED = 202;
 const SSE_INITIAL_PADDING_LENGTH = 2048;
 const STOP_ATTENTION_TIMEOUT_MS = 25_000;
 const RESTART_DELAY_MS = 25000;
-const SUBAGENT_TIMEOUT_MINUTES = 30;
 const RUNNER_RESTART_DELAY_MS = 300;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_NOT_FOUND = 404;
@@ -17,7 +15,6 @@ const HTTP_CONFLICT = 409;
 const MAX_PROMPT_MIBIBYTES = 5;
 const HTTP_INTERNAL_SERVER_ERROR = 500;
 const HTTP_SERVICE_UNAVAILABLE = 503;
-const SECONDS_PER_MINUTE = 60;
 const NO_SUCH_RUNNER_ERROR = "no such runner";
 
 
@@ -27,6 +24,7 @@ const MAX_SUBAGENT_NAME_BYTES = 256;
 const MAX_UI_REQUEST_TEXT_BYTES = 4096;
 
 import { errorMessage } from "../../errors.mjs";
+import { createSubagentService, DEFAULT_SUBAGENT_TIMEOUT_MS } from "../../subagents.mjs";
 import { disableCaching } from "../createRequestContext.mjs";
 import { isNonArrayObject as isJsonObject } from "../../valuePredicates.mjs";
 
@@ -59,25 +57,8 @@ function parseSubagentRequest(body, options) {
   return directory.error ? directory : { prompt, parentSessionId, name, dir: directory.dir };
 }
 
-async function startSubagentRunner({ spawnRunner, dir, parentSessionId, name }) {
-  return spawnRunner({
-    dir,
-    autostart: false,
-    initialArgs: ["--parent-session", parentSessionId, "--name", name, "--exclude-tools", "loop"],
-  });
-}
-
-function formatSubagentFailure(fallback, error, output) {
-  return {
-    ok: false,
-    output,
-    errorLog: error === undefined || error === null || error === "" ? fallback : errorMessage(error),
-  };
-}
-
 async function streamSubagentLifecycle({
-  runner, prompt, res, observeRunner, sendToRunner, stopRunner, runnerInfo,
-  setIntervalImpl, clearIntervalImpl, setTimeoutImpl, clearTimeoutImpl, subagentTimeoutMs,
+  subagents, runner, prompt, res, runnerInfo, setIntervalImpl, clearIntervalImpl,
 }) {
   const writeEvent = (event) => res.write(`${JSON.stringify(event)}\n`);
   res.writeHead(HTTP_OK, {
@@ -88,97 +69,23 @@ async function streamSubagentLifecycle({
   res.flushHeaders?.();
   writeEvent({ type: "started", runner: runnerInfo(runner) });
 
-  let observerDispose = null;
-  let disposeRequested = false;
-  let timer = null;
-  let heartbeat = null;
-  let done = false;
-  let resolveCompletion;
-  let assistantOutput = "";
-  let assistantError = "";
-  const completion = new Promise((resolvePromise) => { resolveCompletion = resolvePromise; });
-  const dispose = () => {
-    if (!observerDispose) {
-      disposeRequested = true;
-      return;
-    }
-    try { observerDispose(); } catch {}
-    observerDispose = null;
-  };
-  const finish = (result) => {
-    if (done) return;
-    done = true;
-    dispose();
-    if (timer !== null) clearTimeoutImpl(timer);
-    if (heartbeat !== null) clearIntervalImpl(heartbeat);
-    resolveCompletion(result);
-  };
-  const fail = (fallback, error) => finish(formatSubagentFailure(fallback, error, assistantOutput));
-
-  const assistantText = (message) => (Array.isArray(message.content) ? message.content : [])
-    .filter((part) => isJsonObject(part) && part.type === "text" && typeof part.text === "string")
-    .map((part) => part.text)
-    .join("\n");
-  const rememberAssistantMessage = (message) => {
-    const text = assistantText(message);
-    if (text) assistantOutput = text;
-    if (["error", "aborted"].includes(message.stopReason)) {
-      assistantError = typeof message.errorMessage === "string" && message.errorMessage
-        ? message.errorMessage
-        : `assistant stopped: ${message.stopReason}`;
-    }
-  };
-  const observeEvent = (event) => {
-    if (!isJsonObject(event)) return;
-    if (event.type === "message_end" && event.message?.role === "assistant") rememberAssistantMessage(event.message);
-    else if (event.type === "agent_settled") finish({ ok: !assistantError, output: assistantOutput, errorLog: assistantError });
-    else if (event.type === "response" && event.command === "prompt" && event.success === false) fail("Subagent prompt was rejected.", event.error);
-    else if (event.type === "pi_error") fail("Subagent process failed.", event.error);
-    else if (event.type === "pi_exit") {
-      const signalSuffix = event.signal ? ` (${event.signal})` : "";
-      fail(`Subagent exited before settling${signalSuffix}.`);
-    }
-  };
-
-  try {
-    observerDispose = observeRunner(runner, observeEvent);
-    if (typeof observerDispose !== "function") throw new TypeError("observeRunner must return a disposal function");
-    if (disposeRequested) dispose();
-  } catch (error) {
-    fail("Unable to observe subagent process.", error);
-  }
-
-  if (!done) {
-    heartbeat = setIntervalImpl(() => {
-      if (!res.writableEnded && !res.destroyed) writeEvent({ type: "heartbeat", timestamp: Date.now() });
-    }, STOP_ATTENTION_TIMEOUT_MS);
-    heartbeat?.unref?.();
-    timer = setTimeoutImpl(() => fail("Subagent timed out."), subagentTimeoutMs);
-    timer?.unref?.();
-  }
-
+  const controller = new AbortController();
   let disconnected = false;
   const cancel = () => {
     disconnected = true;
-    fail("Subagent request was cancelled.");
+    controller.abort();
   };
   res.on?.("close", cancel);
-  runner.subagentStatus = "running";
-  if (!done) {
-    try {
-      if (!await sendToRunner(runner, { type: "prompt", message: prompt })) fail("Subagent process was unavailable.");
-    } catch (error) {
-      fail("Subagent process was unavailable.", error);
-    }
-  }
-  let result = await completion;
-  res.off?.("close", cancel);
-  runner.subagentStatus = result.ok ? "succeeded" : "failed";
+  const heartbeat = setIntervalImpl(() => {
+    if (!res.writableEnded && !res.destroyed) writeEvent({ type: "heartbeat", timestamp: Date.now() });
+  }, STOP_ATTENTION_TIMEOUT_MS);
+  heartbeat?.unref?.();
+  let result;
   try {
-    await stopRunner(runner);
-  } catch (error) {
-    result = { ok: false, output: result.output, errorLog: `Failed to stop subagent: ${errorMessage(error)}` };
-    runner.subagentStatus = "failed";
+    result = await subagents.run(runner, prompt, { signal: controller.signal });
+  } finally {
+    clearIntervalImpl(heartbeat);
+    res.off?.("close", cancel);
   }
   if (!disconnected && !res.writableEnded && !res.destroyed) {
     writeEvent({ type: "complete", ...result, runner: runnerInfo(runner) });
@@ -201,6 +108,7 @@ export function createRunnerRoutes({
   runnersChanged = () => {},
   spawnRunner,
   observeRunner,
+  subagents: providedSubagents = null,
   runnerInfo,
   replayRunnerEvents = () => [],
   openSessionRunner,
@@ -213,7 +121,7 @@ export function createRunnerRoutes({
   clearIntervalImpl = clearInterval,
   setTimeoutImpl = setTimeout,
   clearTimeoutImpl = clearTimeout,
-  subagentTimeoutMs = SUBAGENT_TIMEOUT_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND,
+  subagentTimeoutMs = DEFAULT_SUBAGENT_TIMEOUT_MS,
   resolvePath = resolve,
   isDirectory = (path) => statSync(path).isDirectory(),
 }) {
@@ -238,6 +146,10 @@ export function createRunnerRoutes({
   }
 
   const { json, readJsonBody, resolveSafePath } = requestContext;
+  // The application passes its hot-reloaded service; standalone construction builds one from the same operations.
+  const subagents = providedSubagents ?? createSubagentService({
+    spawnRunner, observeRunner, sendToRunner, stopRunner, setTimeoutImpl, clearTimeoutImpl, timeoutMs: subagentTimeoutMs,
+  });
 
   function runnerHolds(sessionRef) {
     const equals = state.sessionReferences?.equals;
@@ -477,25 +389,14 @@ export function createRunnerRoutes({
         json(res, parsed.status, { error: parsed.error });
         return;
       }
-      if (typeof spawnRunner !== "function" || typeof observeRunner !== "function") {
+      if (!subagents.available) {
         json(res, HTTP_SERVICE_UNAVAILABLE, { error: "managed subagents are unavailable" });
         return;
       }
 
-      const runner = await startSubagentRunner({ spawnRunner, ...parsed });
+      const runner = await subagents.start(parsed);
       await streamSubagentLifecycle({
-        runner,
-        prompt: parsed.prompt,
-        res,
-        observeRunner,
-        sendToRunner,
-        stopRunner,
-        runnerInfo,
-        setIntervalImpl,
-        clearIntervalImpl,
-        setTimeoutImpl,
-        clearTimeoutImpl,
-        subagentTimeoutMs,
+        subagents, runner, prompt: parsed.prompt, res, runnerInfo, setIntervalImpl, clearIntervalImpl,
       });
     },
 

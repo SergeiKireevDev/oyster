@@ -83,7 +83,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     sessionFileParam, sessionFileFromSearch, sessionCatalog: jsonlSessionCatalog,
   } = await import(bust("sessions.mjs"));
   const { createThreadService } = await import(bust("threads.mjs"));
-  const { createRunnerManager } = await import(bust("runners.mjs"));
+  const { createRunnerManager } = await import(bust("runners.mjs")); const { createSubagentService } = await import(bust("subagents.mjs")); const { createLoopService } = await import(bust("loops.mjs"));
   const { createMcpSettings, createMcpSettingsRoutes } = await import(bust("mcp-settings.mjs")); const { createConfiguredRunnerDrivers } = await import(bust("runner-drivers/configured.mjs")); const { createClaudeTranscriptSink } = await import(bust("persistence/claudeTranscriptSink.mjs"));
   const { createSessionReferenceCodec, createSessionRequestResolver } = await import(bust("session-references.mjs"));
   const { createSessionOperations } = await import(bust("session-operations.mjs"));
@@ -98,12 +98,12 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     { createOpenRoutes }, { createStaticRoutes }, { createRunnerRoutes },
     { createSessionRoutes, setSessionFamilyArchived, stopSessionFamilyRunners }, { createFileRoutes }, { createWorkdirRoutes },
     { createTunnelRoutes }, { createRoutineRoutes },
-    { createCredentialRoutes }, { createOAuthRoutes }, { createPushRoutes }, { createMcpRoutes }, { createThreadRoutes }, { createSubscriptionUsageRoutes },
+    { createCredentialRoutes }, { createOAuthRoutes }, { createPushRoutes }, { createMcpRoutes }, { createThreadRoutes }, { createSubscriptionUsageRoutes }, { createLoopRoutes },
   ] = await Promise.all([
     "http/createRequestContext.mjs", "http/createRouteTable.mjs", "http/internalDispatch.mjs",
     ...[
       "openRoutes", "staticRoutes", "runnerRoutes", "sessionRoutes", "fileRoutes",
-      "workdirRoutes", "tunnelRoutes", "routineRoutes", "credentialRoutes", "oauthRoutes", "pushRoutes", "mcpRoutes", "threadRoutes", "subscriptionUsageRoutes",
+      "workdirRoutes", "tunnelRoutes", "routineRoutes", "credentialRoutes", "oauthRoutes", "pushRoutes", "mcpRoutes", "threadRoutes", "subscriptionUsageRoutes", "loopRoutes",
     ].map((name) => `http/routes/${name}.mjs`),
   ].map((name) => import(bust(name))));
 
@@ -173,9 +173,9 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
     sessionFileParam,
     sessionFileFromSearch,
     readSessionHeaderInfo,
-  });
+  }); const subagents = createSubagentService({ spawnRunner, observeRunner, sendToRunner, stopRunner }); const loops = createLoopService({ state, subagents, resolveSafePath: requestContext.resolveSafePath });
   const runnerRoutes = createRunnerRoutes({
-    state, appStore, requestContext, runnerFromReq, startRunner, listRunnerInfo, runnersChanged,
+    subagents, state, appStore, requestContext, runnerFromReq, startRunner, listRunnerInfo, runnersChanged,
     sendToRunner, requestRunnerUi, acknowledgeRunnerAttention, stopRunner, stopRunnerFamily: (rootRunner) => threadService.stopRunnerFamily(rootRunner, { stopRunner, stopFamily: (runner) => stopSessionFamilyRunners({ state, catalog: state.sessionCatalog, rootRunner: runner, stopRunner }) }),
     spawnRunner, observeRunner, runnerInfo, replayRunnerEvents, openSessionRunner, sessionReferenceParam,
     runnerHarnesses: () => runnerDrivers.list(),
@@ -209,7 +209,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
       teardownRoutine, releaseRoutine, deleteRoutine, spawnRoutineAgent,
     },
   });
-  const pushRoutes = createPushRoutes({ requestContext, pushService: webPushService }); const mcpRoutes = createMcpRoutes({ state, requestContext, dispatch: (method, path, body, options) => dispatchRoute(routeTable, method, path, body, options) });
+  const pushRoutes = createPushRoutes({ requestContext, pushService: webPushService }); const mcpRoutes = createMcpRoutes({ state, requestContext, loops, dispatch: (method, path, body, options) => dispatchRoute(routeTable, method, path, body, options) });
   const sessionRoutes = createSessionRoutes({
     state,
     appStore,
@@ -228,7 +228,7 @@ export async function buildCandidate(stableState, { generation = Symbol("applica
   });
   const threadRoutes = createThreadRoutes({ state, requestContext, threads: threadService, deleteSession: (sessionKey) => dispatchRoute(routeTable, "DELETE", `/session?key=${encodeURIComponent(sessionKey)}`) });
 
-  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, pinnedWidget: pinnedWidgetRoutes, routine: routineRoutes, mcpSettings: createMcpSettingsRoutes({ settings: mcpSettings, requestContext }), credential: credentialRoutes, subscriptionUsage: subscriptionUsageRoutes, oauth: oauthRoutes, push: pushRoutes, mcp: mcpRoutes, thread: threadRoutes });
+  const routeTable = createRouteTable({ static: staticRoutes, open: openRoutes, runner: runnerRoutes, session: sessionRoutes, file: fileRoutes, workdir: workdirRoutes, tunnel: tunnelRoutes, pinnedWidget: pinnedWidgetRoutes, routine: routineRoutes, mcpSettings: createMcpSettingsRoutes({ settings: mcpSettings, requestContext }), credential: credentialRoutes, subscriptionUsage: subscriptionUsageRoutes, oauth: oauthRoutes, push: pushRoutes, mcp: mcpRoutes, thread: threadRoutes, loop: createLoopRoutes({ requestContext, loops }) });
   const { handleRequest } = createApplicationHandlers({ routeTable, openRoutes, requestContext });
 
   scheduleHublotStartupReconciliation({ state, supervisor: state.hublotSupervisor });

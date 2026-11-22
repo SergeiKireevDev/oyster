@@ -84,6 +84,8 @@ File routes accept only paths under the configured safe roots and deny known cre
 |---|---|
 | `GET /routines` | List routines, bindings, and live state |
 | `POST /routines` | Start, stop, teardown, or release a routine |
+| `GET /loops` | List running plan loops |
+| `POST /loops` | Run a checklist plan to its end; NDJSON progress when the caller accepts `application/x-ndjson`, and disconnecting cancels the loop |
 | `GET /pinned-widgets` | List scoped widgets and one-level groups |
 | `POST /pinned-widgets` | Pin a confined path, HTTPS link, or live interface |
 | `PATCH /pinned-widgets` | Rename, reorder, group, or ungroup a widget |

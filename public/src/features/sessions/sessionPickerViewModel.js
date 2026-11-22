@@ -187,15 +187,26 @@ export function groupSessionEntriesByFamily(entries) {
   return [...families.values()];
 }
 
+// Loop iterations are titled "↻<n> <step>"; loops recorded before that used "Loop iteration <n>: <step>".
+const LOOP_ITERATION_TITLE = /^(?:↻(\d+)(?= |$)|Loop iteration (\d+):)/i;
+
+/** The iteration number a loop subagent's title carries, or null for any other session. */
+export function loopIteration(title) {
+  const match = String(title ?? "").match(LOOP_ITERATION_TITLE);
+  return match ? Number(match[1] ?? match[2]) : null;
+}
+
+function orderLoopIterations(members, titleOf) {
+  const loop = members.some((member) => loopIteration(titleOf(member)) !== null);
+  const iteration = (member) => loopIteration(titleOf(member)) ?? Number.MAX_SAFE_INTEGER;
+  return { loop, members: loop ? [...members].sort((left, right) => iteration(left) - iteration(right)) : members };
+}
+
 /** Prepares sidebar entry families and loop ordering once before template rendering. */
 export function prepareSessionEntryFamilies(entries) {
   const entryLabel = (entry) => entry.runner?.sessionName || entry.session?.name || entry.session?.preview || "";
   return groupSessionEntriesByFamily(entries).map((family) => {
-    const loop = family.children.some((entry) => /^Loop iteration \d+:/i.test(entryLabel(entry)));
-    const children = loop ? [...family.children].sort((left, right) => {
-      const iteration = (entry) => Number(entryLabel(entry).match(/^Loop iteration (\d+):/i)?.[1] ?? Number.MAX_SAFE_INTEGER);
-      return iteration(left) - iteration(right);
-    }) : family.children;
+    const { loop, members: children } = orderLoopIterations(family.children, entryLabel);
     return { ...family, children, loop };
   });
 }
@@ -203,11 +214,7 @@ export function prepareSessionEntryFamilies(entries) {
 /** Prepares picker family structure and loop ordering once before template rendering. */
 export function prepareSessionFamilies(sessions) {
   return groupSessionFamilies(sessions).map((family) => {
-    const loop = family.forks.some((session) => /^Loop iteration \d+:/i.test(session.name || session.preview || ""));
-    const forks = loop ? [...family.forks].sort((left, right) => {
-      const iteration = (session) => Number((session.name || "").match(/^Loop iteration (\d+):/i)?.[1] ?? Number.MAX_SAFE_INTEGER);
-      return iteration(left) - iteration(right);
-    }) : family.forks;
+    const { loop, members: forks } = orderLoopIterations(family.forks, (session) => session.name || "");
     return { ...family, forks, loop };
   });
 }

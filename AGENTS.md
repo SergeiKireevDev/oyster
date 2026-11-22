@@ -8,7 +8,7 @@ This repo ships the pi extensions that power its features in `extensions/`:
 |---|---|---|
 | `extensions/file-explorer.ts` | `/files` command + `ctrl+o` shortcut | Browse the workspace from the TUI, then edit or download any file. |
 | `extensions/hublot.ts` | `hublot` tool | Open/close/list public Cloudflare tunnels to caller-provided local ports. |
-| `extensions/loop.ts` | `/loop` command + `loop` tool | Execute Markdown checklist items sequentially in isolated subagents, advancing only after an executable validation script passes. |
+| `extensions/loop.ts` | `/loop` command + `loop` tool | Run a Markdown checklist through the server's loop engine: one isolated subagent per item, advancing only after an executable validation script passes. |
 | `extensions/pinned-widget.ts` | `pinned_widget` tool | Pin/list/group private files, media, Markdown, directories, and HTTPS links in the right sidebar. |
 | `extensions/routine.ts` | `routine` tool | Create/start/stop/teardown session-bound scripts with live progress reporting. |
 | `extensions/sudo.ts` | `bash` permission gate | Prompt through Oyster for a masked sudo password before a permissioned command executes. |
@@ -27,11 +27,17 @@ Restart pi afterwards. When developing an extension through Oyster, stop and res
 
 ## Built-in MCP endpoint (Claude Code and other MCP harnesses)
 
-pi has no MCP client, so the extensions above stay the pi integration. For MCP-capable harnesses, the Oyster server itself serves the same tools over MCP (Streamable HTTP, stateless) at `POST /mcp` — `hublot`, `pinned_widget`, `group_pinned_widgets`, `routine` — plus a `bash` tool whose `sudo=true` option mirrors `extensions/sudo.ts`: the complete command runs as root after Oyster's masked password dialog, brokered through `POST /runner/ui-request` to the runner's browser. The implementation lives in `server/http/routes/mcpRoutes.mjs`; its tools call the regular route handlers in-process through `server/http/internalDispatch.mjs`, so there is no second copy of the widget, tunnel, or routine logic and no loopback HTTP.
+pi has no MCP client, so the extensions above stay the pi integration. For MCP-capable harnesses, the Oyster server itself serves the same tools over MCP (Streamable HTTP, stateless) at `POST /mcp` — `hublot`, `pinned_widget`, `group_pinned_widgets`, `routine`, `loop` — plus a `bash` tool whose `sudo=true` option mirrors `extensions/sudo.ts`: the complete command runs as root after Oyster's masked password dialog, brokered through `POST /runner/ui-request` to the runner's browser. The implementation lives in `server/http/routes/mcpRoutes.mjs`; its tools call the regular route handlers in-process through `server/http/internalDispatch.mjs`, so there is no second copy of the widget, tunnel, or routine logic and no loopback HTTP.
 
 Every request carries its caller: `POST /mcp?runner=<id>&session=<id>&workdir=<abs path>` with the usual bearer token. The Claude Code driver builds that URL per launch and passes it with `--mcp-config` as an `http` server, using the header `Authorization: Bearer ${OYSTER_TOKEN}`, which Claude Code expands from the inherited environment so the token never appears on a command line. It also allows every `mcp__oyster` tool. Nothing has to be registered in Claude Code's settings, and other MCP clients can use the same URL.
 
 Driver modules such as `server/runner-drivers/claude-code.mjs` are reached only through static imports, which the hot reloader does not cache-bust, so restart the Oyster service (not just the runner) after changing them. When changing a tool, update both the pi extension and the MCP endpoint. Verify with `node --test tests/mcp-routes.test.mjs`.
+
+## Loops
+
+The loop engine lives in the server (`server/loops.mjs`), not in a harness: `extensions/loop.ts` and the MCP `loop` tool are both clients of it, the first through `POST /loops` (NDJSON progress; disconnecting cancels the loop), the second in-process. `GET /loops` lists running loops. One loop may run per working tree.
+
+Each iteration is a fresh managed subagent (`server/subagents.mjs`, shared with `POST /subagents`) titled `↻<n> <step>`; the session lists recognize a loop family by that prefix. An iteration starts from an empty context, so its prompt is deliberately small: the checklist item with the lines indented beneath it, the headings it sits under, the intro prose of those sections, a handoff of at most 4 KB from the previous iteration, and after a failure the last 16 KB of the failure log. The plan itself is never inlined; the prompt names its path. The subagent ends its final response with a handoff and a `COMMIT MESSAGE:` block, which the loop uses for the commit it makes after validation passes. When changing what an iteration sees, keep the prompt independent of plan length; `tests/loops.test.mjs` asserts it.
 
 Pinned files remain private and open through authenticated native Markdown, image, and video displays; use a hublot only for a public live interface. Opening a hublot requires a local `port` (1–65535), with an optional `description` label. Provision the service separately: hublot starts only cloudflared and persists its SQLite entry; closing the tunnel leaves the local service running. The `hublot` and `routine` tools discover the UI server
 from `OYSTER_URL` (default `http://127.0.0.1:8080`) and authenticate with
