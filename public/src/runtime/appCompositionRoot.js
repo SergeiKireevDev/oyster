@@ -40,6 +40,7 @@ import { sessionPicker, updateSessionPicker } from "../stores/sessionPicker.js";
 import { addToast } from "../stores/toasts.js";
 import { createComposerAssembly } from "../features/composer/createComposerAssembly.js";
 import { createThreadsAssembly } from "../features/threads/createThreadsAssembly.js";
+import { usesTouchKeyboard } from "../lib/touchKeyboard.js";
 import { runnerRootSessionKey } from "../features/threads/threadModel.js";
 import { setThreadFamily, threadDraft, threadFamily, threadPending } from "../stores/threads.js";
 import { createCredentialsAssembly } from "../features/credentials/createCredentialsAssembly.js";
@@ -136,6 +137,7 @@ const composerAssembly = createComposerAssembly({
   rpc: (...args) => rpc(...args),
   schedulePostSendSync: (text) => schedulePostSendFileTranscriptSync(text),
   interceptSend: (text) => threadsAssembly.operations.interceptSend(text),
+  enterBreaksLine: () => usesTouchKeyboard(window),
   toast: addToast,
 });
 const composerOperations = composerAssembly.operations;

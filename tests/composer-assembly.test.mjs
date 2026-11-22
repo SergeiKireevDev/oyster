@@ -12,7 +12,7 @@ import {
   MENU_ACTION,
 } from "../public/src/runtime/uiActionNames.js";
 
-function createHarness({ rpc = async () => ({}) } = {}) {
+function createHarness({ rpc = async () => ({}), enterBreaksLine = () => false } = {}) {
   const calls = [];
   const input = {
     value: "hello",
@@ -29,6 +29,7 @@ function createHarness({ rpc = async () => ({}) } = {}) {
   };
   const uiActions = createUiActionRegistry();
   const assembly = createComposerAssembly({
+    enterBreaksLine,
     uiActions,
     findElement: () => input,
     setTextValue: (value) => calls.push(["text", value]),
@@ -248,4 +249,19 @@ test("composer assembly removes a failed local echo", async () => {
   assert.ok(calls.some((call) => call[0] === "removeEcho" && call[1] === "hello"));
   assert.ok(calls.some((call) => call[0] === "toast" && /send failed/.test(call[1])));
   assembly.teardown();
+});
+
+test("on a touch keyboard Enter breaks the line and only the Send button sends", async () => {
+  const { input, calls, uiActions } = createHarness({ enterBreaksLine: () => true });
+  input.value = "first line";
+  let prevented = false;
+  uiActions.invoke(COMPOSER_KEYDOWN_ACTION, { key: "Enter", shiftKey: false, isComposing: false, preventDefault: () => { prevented = true; } });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  // The field keeps the key, so the browser inserts the line break; nothing was sent.
+  assert.equal(prevented, false);
+  assert.equal(calls.some((call) => call[0] === "rpc" && call[1]?.type === "prompt"), false);
+  assert.equal(input.value, "first line");
+
+  await uiActions.invoke(COMPOSER_SEND_ACTION);
+  assert.ok(calls.some((call) => call[0] === "user" && call[1] === "first line"));
 });
