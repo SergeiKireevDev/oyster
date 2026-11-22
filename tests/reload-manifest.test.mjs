@@ -43,7 +43,7 @@ test("reload manifest covers high-risk candidate boundaries and every route", ()
 
   const expectedRoutes = [
     "credential", "file", "mcp", "oauth", "open", "routine", "runner",
-    "session", "static", "thread", "tunnel", "workdir",
+    "session", "static", "subscriptionUsage", "thread", "tunnel", "workdir",
   ].map((name) => `http/routes/${name}Routes.mjs`);
   assert.deepEqual(RELOADABLE_MODULE_GRAPH.http.filter((module) => module.includes("/routes/")), expectedRoutes);
 });

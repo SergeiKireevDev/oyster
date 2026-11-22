@@ -77,6 +77,34 @@
     return provider.credentialType === "api_key" ? "Sign in instead" : "Sign in";
   }
 
+  const MS_PER_MINUTE = 60000;
+  const MINUTES_PER_HOUR = 60;
+  const HOURS_PER_DAY = 24;
+  const USAGE_WARNING_PERCENT = 75;
+  const USAGE_CRITICAL_PERCENT = 90;
+
+  function subscriptionUsage(provider) {
+    if (provider?.credentialType !== "oauth") return null;
+    const usage = $credentialsState.usage?.[provider.provider];
+    return usage && (usage.windows?.length || usage.error) ? usage : null;
+  }
+
+  function usageLevel(percent) {
+    if (percent >= USAGE_CRITICAL_PERCENT) return "critical";
+    return percent >= USAGE_WARNING_PERCENT ? "warning" : "normal";
+  }
+
+  function resetLabel(resetsAt) {
+    const minutes = Math.round((Date.parse(resetsAt) - Date.now()) / MS_PER_MINUTE);
+    if (!Number.isFinite(minutes)) return "";
+    if (minutes <= 0) return "resets now";
+    const hours = Math.floor(minutes / MINUTES_PER_HOUR);
+    const days = Math.floor(hours / HOURS_PER_DAY);
+    if (days) return `resets in ${days}d ${hours % HOURS_PER_DAY}h`;
+    if (hours) return `resets in ${hours}h ${minutes % MINUTES_PER_HOUR}m`;
+    return `resets in ${minutes}m`;
+  }
+
   function restartProcessLabel(runnerIds) {
     const count = runnerIds.length;
     return `${count} ${count === 1 ? "process" : "processes"}`;
@@ -367,6 +395,26 @@
               {/if}
             {/if}
           </div>
+          {#if subscriptionUsage(provider)}
+            {@const usage = subscriptionUsage(provider)}
+            <div class="subscription-usage" aria-label={`${provider.displayName} subscription usage`}>
+              {#if usage.plan}<span class="subscription-usage-plan">{usage.plan} plan</span>{/if}
+              {#each usage.windows as usageLimit (usageLimit.id)}
+                <div class="subscription-usage-meter" data-level={usageLevel(usageLimit.usedPercent)}>
+                  <div class="subscription-usage-label">
+                    <span>{usageLimit.label}</span>
+                    <span>{Math.round(usageLimit.usedPercent)}%{#if usageLimit.resetsAt}{` · ${resetLabel(usageLimit.resetsAt)}`}{/if}</span>
+                  </div>
+                  <div class="subscription-usage-bar" role="progressbar" aria-label={`${usageLimit.label} usage`} aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(usageLimit.usedPercent)}>
+                    <span style:width={`${usageLimit.usedPercent}%`}></span>
+                  </div>
+                </div>
+              {/each}
+              {#if usage.error}
+                <p class="subscription-usage-note">{usage.stale ? "Last known usage. " : ""}{usage.error.message}</p>
+              {/if}
+            </div>
+          {/if}
         </div>
       {/each}
     </div>
@@ -486,6 +534,60 @@
     border-radius: 10px;
     background: color-mix(in srgb, var(--panel) 90%, transparent);
   }
+
+  .api-key-row:has(.subscription-usage) { flex-wrap: wrap; }
+
+  .subscription-usage {
+    display: grid;
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+    gap: 7px;
+    padding-top: 9px;
+    border-top: 1px solid var(--border);
+  }
+
+  .subscription-usage-plan {
+    width: fit-content;
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: capitalize;
+  }
+
+  .subscription-usage-meter { display: grid; min-width: 0; gap: 4px; }
+
+  .subscription-usage-label {
+    display: flex;
+    min-width: 0;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 10.5px;
+  }
+
+  .subscription-usage-label span:first-child { color: var(--text); font-weight: 600; }
+  .subscription-usage-label span:last-child { font-family: var(--mono); font-size: 10px; white-space: nowrap; }
+
+  .subscription-usage-bar {
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--panel-2);
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+
+  .subscription-usage-bar span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width .3s ease;
+  }
+
+  .subscription-usage-meter[data-level="warning"] .subscription-usage-bar span { background: var(--yellow); }
+  .subscription-usage-meter[data-level="critical"] .subscription-usage-bar span { background: var(--red); }
+
+  .subscription-usage-note { margin: 0; color: var(--muted); font-size: 10.5px; }
 
   .api-key-provider,
   .api-key-status { display: flex; min-width: 0; align-items: center; gap: 7px; }

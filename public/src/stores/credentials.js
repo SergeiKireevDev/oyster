@@ -2,6 +2,8 @@ import { writable } from "svelte/store";
 
 export const emptyCredentialsState = Object.freeze({
   providers: [],
+  // Subscription usage percentages keyed by provider id (no credential data).
+  usage: {},
   flow: null,
   setupMode: false,
   targetHarness: null,
