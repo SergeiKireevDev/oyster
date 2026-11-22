@@ -242,7 +242,12 @@
   #input {
     position: relative;
     z-index: 1;
+    /* Block, not inline: an inline box leaves a descender gap that makes the editor (and the
+       highlight layer filling it) taller than the field, so the two stop scrolling in step. */
+    display: block;
     width: 100%;
+    /* No scrollbar: it would narrow the field but not the highlight layer and wrap them differently. */
+    scrollbar-width: none;
     min-height: 40px;
     max-height: 200px;
     padding: 9px 4px;
@@ -260,6 +265,9 @@
     resize: none;
   }
 
+  #input::-webkit-scrollbar {
+    display: none;
+  }
   #input:focus {
     border: 0;
   }
