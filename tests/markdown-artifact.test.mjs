@@ -24,7 +24,7 @@ test("MarkdownArtifact preserves raw content and exposes semantic content states
     source,
     /<SanitizedMarkdown[\s\S]*element="article"[\s\S]*className="pinned-markdown-viewer"[\s\S]*\{source\}[\s\S]*enableMermaid=\{true\}[\s\S]*onMermaidExplore=\{exploreDiagram\}/,
   );
-  assert.match(source, /<section class="markdown-artifact">/);
+  assert.match(source, /<section class="markdown-artifact" class:exploring=\{Boolean\(exploredDiagram\)\}>/);
   assert.match(source, /class="artifact-state artifact-state-empty" role="status" aria-atomic="true"/);
 });
 
@@ -48,6 +48,9 @@ test("MarkdownArtifact exposes a dedicated, accessible Mermaid zoom explorer", (
 
 test("MarkdownArtifact uses the tokenized responsive reader contract", () => {
   assert.match(source, /\.markdown-artifact\s*\{[\s\S]*min-width: 0[\s\S]*min-height: 100%/);
+  // A fixed height would end the page surface at the fold of a scrollable document.
+  assert.doesNotMatch(source, /\.markdown-artifact\s*\{[^}]*[\s;]height:/);
+  assert.match(source, /\.markdown-artifact\.exploring\s*\{\s*height: 100%;\s*\}/);
   assert.match(styles, /\.pinned-markdown-viewer\s*\{[\s\S]*width: min\(100%, 78ch\)/);
   assert.match(styles, /background: color-mix\(in srgb, var\(--panel\)/);
   assert.match(styles, /color: var\(--text\)/);
