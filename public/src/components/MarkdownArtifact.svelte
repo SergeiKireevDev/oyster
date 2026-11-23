@@ -57,7 +57,7 @@
   }
 </script>
 
-<section class="markdown-artifact">
+<section class="markdown-artifact" class:exploring={Boolean(exploredDiagram)}>
   {#if exploredDiagram}
     <section class="mermaid-explorer" aria-label={exploredLabel}>
       <header class="mermaid-explorer-toolbar">
@@ -117,12 +117,17 @@
 </section>
 
 <style>
+  /* The reader grows with its content so the page surface covers everything
+     the stage scrolls; only the explorer is pinned to the stage's own height. */
   .markdown-artifact {
     display: grid;
     width: 100%;
-    height: 100%;
     min-width: 0;
     min-height: 100%;
+  }
+
+  .markdown-artifact.exploring {
+    height: 100%;
   }
 
   .mermaid-explorer {
