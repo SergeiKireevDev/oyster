@@ -154,7 +154,7 @@ Keep glyphs at `14–16px` in most controls. Do not add margins to every child i
 
 ## Modals, menus, and overlays
 
-- The overlay uses a dark translucent scrim plus blur. It sits above slide-over sidebars and below toasts.
+- The overlay uses a dark, nearly opaque scrim and no backdrop blur: the transcript keeps updating behind an open dialog, and a blur is recomposited with the dialog on every update, which flickers. It sits above slide-over sidebars and below toasts.
 - A standard modal is full-width up to about `480px`, capped by viewport height, uses a `16px` radius in the current visual layer, and has a scrollable `.m-body`.
 - Use `.wide` only when content genuinely needs the existing wider cap (`760px`). Specialized artifact readers may be wider.
 - Keep modal structure consistent: `.m-title`, `.m-body`, content/options, then `.m-actions`.

@@ -386,8 +386,9 @@
       max(16px, env(safe-area-inset-right))
       max(16px, env(safe-area-inset-bottom))
       max(16px, env(safe-area-inset-left));
-    background: rgba(4,6,10,.72);
-    backdrop-filter: blur(8px);
+    /* An opaque scrim rather than a backdrop blur: a blur is recomposited with
+       the dialog above it on every transcript update, which flickers. */
+    background: rgba(4,6,10,.86);
   }
   #overlay.open { display: flex; }
   #modal {
@@ -958,7 +959,7 @@ html[data-theme="light"] .hublot-block { border-color: var(--border); background
 html[data-theme="light"] .hublot-block .preview.builtin { background: linear-gradient(145deg, #eef1f7, #e3e8f0); }
 html[data-theme="light"] .hublot-block .cap { border-top-color: var(--border); }
 
-html[data-theme="light"] #overlay { background: rgba(35,43,65,.4); }
+html[data-theme="light"] #overlay { background: rgba(35,43,65,.58); }
 html[data-theme="light"] #modal { --modal-surface: var(--panel); }
 html[data-theme="light"] .analytics-modal {
   --analytics-series-1: #5263d8;
