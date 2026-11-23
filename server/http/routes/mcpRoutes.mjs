@@ -417,10 +417,10 @@ export function createOysterMcpServer(context, { dispatch, spawnImpl = spawn, lo
     title: "Loop",
     description:
       "Execute a Markdown checklist plan sequentially and autonomously. Each unchecked item runs in a fresh isolated subagent " +
-      "that receives only that step (with its nested detail and section notes) and a short handoff from the previous step, never the whole plan. " +
+      "that receives only that step (with its nested detail and the plan's rule sections, never the other checklist items) and a short handoff from the previous step, never the whole plan. " +
       "An executable validation script then decides whether the item is checked off and committed; a failed step is retried with the tail of its failure log. " +
       "The call returns when every item is checked, or when one step fails to advance for 20 consecutive iterations. " +
-      "Write each checklist item so it is self-contained, with step-specific detail indented beneath it and shared constraints as prose under the plan's headings.",
+      "Write each checklist item so it is self-contained, with step-specific detail indented beneath it and shared rules in sections of their own, kept apart from the checklist.",
     inputSchema: {
       planPath: z.string().describe("Path to the Markdown checklist plan, relative to the session workdir or absolute"),
       validationScript: z.string().describe("Path to an executable validation script, relative to the session workdir or absolute"),

@@ -79,7 +79,7 @@ test("iteration prompt contains the step, never the whole plan", () => {
   const prompt = buildIterationPrompt({ planPath: "/repo/PLAN.md", step });
   assert.match(prompt, /# Step 2 of 4\n\nPlan section: Billing rewrite › Phase 1: storage\n\nAdd the payments table/);
   assert.match(prompt, /Columns: id, invoice_id, amount_cents\./);
-  assert.match(prompt, /# Section notes\n\n\*\*Billing rewrite\*\*\nUse integer cents everywhere\./);
+  assert.match(prompt, /# Plan notes\n\n\*\*Billing rewrite\*\*\nUse integer cents everywhere\./);
   assert.match(prompt, /The full plan is `\/repo\/PLAN\.md`; 1 of its 4 steps are already done/);
   assert.match(prompt, /The step after this one is “Backfill payments”\. Do not start it\./);
   assert.match(prompt, /do not create, amend, or otherwise modify Git commits/i);
@@ -87,6 +87,28 @@ test("iteration prompt contains the step, never the whole plan", () => {
   // Other steps and other sections stay on disk.
   assert.doesNotMatch(prompt, /Create the invoices table|Expose GET \/payments|Handlers return JSON/);
   assert.doesNotMatch(prompt, /Handoff from the previous iteration|previous attempt/);
+});
+
+test("rule sections beside the checklist are sent whole; the checklist never is", () => {
+  const files = Array.from({ length: 283 }, (_, index) => `- [ ] A${String(index + 1).padStart(4, "0")} — \`crates/file_${index}.rs\``).join("\n");
+  const plan = [
+    "# File audit", "", "Audit only the first unchecked file.", "",
+    "## Required output", "", "Append one row to results.tsv.", "", "```markdown", "### ANNNN-01 — Short title", "- [ ] not a step", "```", "",
+    "## Files", "", files, "",
+    "## Other batch", "", "- [ ] B0001 — unrelated", "",
+    "### Batch notes", "", "Only for the other batch.", "",
+  ].join("\n");
+  const item = checklistItems(plan)[92];
+  const step = stepContext(plan, item);
+  assert.deepEqual(step.trail, ["File audit", "Files"]);
+  assert.equal(step.notes, "**File audit**\nAudit only the first unchecked file.\n\n**Required output**\nAppend one row to results.tsv.\n\n```markdown\n### ANNNN-01 — Short title\n- [ ] not a step\n```");
+  const prompt = buildIterationPrompt({ planPath: "/audit/plan.md", step });
+  assert.match(prompt, /# Step 93 of 284\n\nPlan section: File audit › Files\n\nA0093 — `crates\/file_92\.rs`/);
+  assert.match(prompt, /Append one row to results\.tsv\./);
+  // Exactly two files are named: this step and the one it must not start.
+  assert.deepEqual(prompt.match(/crates\/file_\d+\.rs/g), ["crates/file_92.rs", "crates/file_93.rs"]);
+  assert.doesNotMatch(prompt, /B0001|Only for the other batch/);
+  assert.ok(Buffer.byteLength(prompt) < 2500);
 });
 
 test("iteration prompt size does not grow with the plan", () => {

@@ -16,15 +16,16 @@ import { isNonArrayObject } from "./valuePredicates.mjs";
  * Every iteration starts from an empty context, so its prompt is the whole
  * cost of the step. The prompt therefore carries the step and nothing else of
  * the plan: the item with its nested detail, the headings it sits under, the
- * intro prose of those sections, and a short handoff from the previous
- * iteration. The plan file stays on disk for the rare step that needs more.
+ * plan's prose that applies to it, and a short handoff from the previous
+ * iteration. The checklist itself, every other step, is never sent; the plan
+ * file stays on disk for the rare step that needs more.
  */
 
 const BYTES_PER_KIBIBYTE = 1024;
 const MILLISECONDS_PER_MINUTE = 60_000;
 const VALIDATION_TIMEOUT_MINUTES = 30;
 const STEP_KIBIBYTES = 16;
-const NOTES_KIBIBYTES = 4;
+const NOTES_KIBIBYTES = 8;
 const HANDOFF_KIBIBYTES = 4;
 const FAILURE_LOG_KIBIBYTES = 16;
 const REPORTED_FAILURE_KIBIBYTES = 4;
@@ -159,17 +160,27 @@ function headingTrail(headings, line) {
   return trail;
 }
 
-/** Intro prose of the plan and of each enclosing section: the text before its first item or subheading. */
+/**
+ * The plan's prose that applies to a step, without any other step.
+ *
+ * Sections enclosing the step contribute their intro, the text before their
+ * first item or subheading. Sections beside the step that hold no checklist
+ * items at all (rules, constraints, output formats) are shared context and are
+ * kept whole. Sections that list other steps are left out.
+ */
 function sectionNotes({ lines, items, headings }, trail) {
-  const boundaries = [...items, ...headings].map((entry) => entry.line).sort((left, right) => left - right);
-  const intro = (start) => {
-    const end = boundaries.find((line) => line >= start) ?? lines.length;
-    return lines.slice(start, end).join("\n").trim();
-  };
-  const notes = [intro(0), ...trail.map((heading) => {
-    const text = intro(heading.line + 1);
-    return text ? `**${heading.text}**\n${text}` : "";
-  })];
+  const enclosing = new Set(trail.map((heading) => heading.line));
+  const sections = [{ heading: null, start: 0 }, ...headings.map((heading) => ({ heading, start: heading.line + 1 }))];
+  const notes = sections.map(({ heading, start }, index) => {
+    const end = sections[index + 1]?.heading.line ?? lines.length;
+    const firstItem = items.find((item) => item.line >= start && item.line < end);
+    const encloses = !heading || enclosing.has(heading.line);
+    const beside = heading && !firstItem && headingTrail(headings, heading.line).slice(0, -1).every((ancestor) => enclosing.has(ancestor.line));
+    if (!encloses && !beside) return "";
+    const text = lines.slice(start, firstItem ? firstItem.line : end).join("\n").trim();
+    if (!text) return "";
+    return heading ? `**${heading.text}**\n${text}` : text;
+  });
   return notes.filter(Boolean).join("\n\n");
 }
 
@@ -202,7 +213,7 @@ export function stepContext(markdown, item) {
 
 const ITERATION_RULES =
   "You are one isolated iteration of a sequential implementation loop driven by Oyster. " +
-  "Implement exactly the step below and nothing beyond it. Work directly in the current repository and add or update focused tests. " +
+  "Carry out exactly the step below and nothing beyond it. Work directly in the current repository; when the step changes code, add or update focused tests. " +
   "The loop owns the plan file, validation, and Git history: do not edit the plan or its checkboxes, and do not create, amend, " +
   "or otherwise modify Git commits. Leave every change in the working tree; the loop validates it and commits only after validation passes.";
 
@@ -215,7 +226,8 @@ const RESPONSE_CONTRACT = [
 function widerPlanSection(planPath, step) {
   const lines = [
     `The full plan is \`${planPath}\`; ${step.done} of its ${step.total} steps are already done and committed (see \`git log\`). ` +
-    "It is deliberately left out of this prompt. Read it only if this step cannot be understood without it.",
+    "What applies to this step is already above; the rest of the file is the checklist of other steps, deliberately left out. " +
+    "Do not open it unless this step cannot be understood without it.",
   ];
   if (step.next) lines.push(`The step after this one is “${step.next}”. Do not start it.`);
   return `# Wider plan\n\n${lines.join("\n")}`;
@@ -233,7 +245,7 @@ export function buildIterationPrompt({ planPath, step, attempt = 1, previous = n
     ITERATION_RULES,
     `# Step ${step.index} of ${step.total}\n\n${location}${step.block}`,
   ];
-  if (step.notes) sections.push(`# Section notes\n\n${step.notes}`);
+  if (step.notes) sections.push(`# Plan notes\n\n${step.notes}`);
   sections.push(widerPlanSection(planPath, step));
   if (previous?.handoff) sections.push(`# Handoff from the previous iteration\n\n${clipTail(previous.handoff, HANDOFF_LIMIT)}`);
   if (previous && !previous.succeeded) {
