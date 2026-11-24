@@ -49,7 +49,7 @@ Oyster and its bundled pi submodule use separate lockfiles. Install and build bo
 
 ### Prerequisites
 
-- **Node.js ≥ 22.19** — check with `node --version`. This is required universally because the stable server uses the built-in `node:sqlite` application store, even when pi sessions use JSONL.
+- **Node.js 22.23.5+ (22.x), 24.22.3+ (24.x), or 26.13.1+ (26.x)** — check with `node --version`. This is required universally because the stable server uses the built-in `node:sqlite` application store, even when pi sessions use JSONL.
 - **`pi` source submodule** — initialize `pi/` and build its coding-agent CLI. `PI_BIN` can still select another compatible executable.
 - **`cloudflared`** (optional) — only needed for the tunnels feature. Install from [pkg.cloudflare.com](https://pkg.cloudflare.com) if you plan to use tunnel functionality.
 - **FFmpeg** (optional outside containers) — converts pinned AVI, MOV, MKV, and M4V videos to cached browser-compatible MP4 playback. Container images and `scripts/install.sh` include it.

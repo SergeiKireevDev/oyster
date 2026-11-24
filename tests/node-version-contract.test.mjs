@@ -1,23 +1,14 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { supportedNodeRange, supportsNode } from '../server/node-version.mjs';
 
-const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-const packageLock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
-const server = readFileSync(new URL("../server/server.mjs", import.meta.url), "utf8");
-const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
-const installationDocs = readFileSync(new URL("../docs/getting-started/installation.md", import.meta.url), "utf8");
-const agents = readFileSync(new URL("../AGENTS.md", import.meta.url), "utf8");
-const e2eReadme = readFileSync(new URL("./e2e/README.md", import.meta.url), "utf8");
-
-test("all runtime contracts require Node 22.19 for the application SQLite store", () => {
-  assert.equal(packageJson.engines.node, ">=22.19.0");
-  assert.equal(packageLock.packages[""].engines.node, ">=22.19.0");
-  assert.match(server, /const MIN_NODE_MAJOR_VERSION = 22;/);
-  assert.match(server, /const MIN_NODE_MINOR_VERSION = 19;/);
-  assert.match(server, /const MIN_NODE_VERSION = \[MIN_NODE_MAJOR_VERSION, MIN_NODE_MINOR_VERSION, 0\]/);
-  assert.match(server, /oyster requires Node\.js >=/);
-  assert.doesNotMatch(server, /if \(config\.PERSISTENT_STORE === "sqlite"\)[\s\S]*?Node\.js/);
-  for (const document of [readme, agents, e2eReadme]) assert.match(document, /Node(?:\.js)?\s*(?:≥|>=)\s*22\.19/);
-  assert.match(installationDocs, /Node\.js \*\*22\.19 or newer\*\*/);
+const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
+test('manifest and lockfile match the runtime security policy', () => {
+  assert.equal(JSON.parse(read('../package.json')).engines.node, supportedNodeRange);
+  assert.equal(JSON.parse(read('../package-lock.json')).packages[''].engines.node, supportedNodeRange);
+});
+test('each supported LTS line has its own patch floor', () => {
+  for (const v of ['22.23.5', '22.24.0', '24.22.3', '26.13.1']) assert.ok(supportsNode(v), v);
+  for (const v of ['22.23.4', '23.9.0', '24.22.2', '25.0.0', '26.13.0', '27.0.0', '22.23.5-rc.1']) assert.ok(!supportsNode(v), v);
 });

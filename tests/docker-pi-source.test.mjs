@@ -26,7 +26,7 @@ test("local SQLite Docker build requires and packages the named pi source contex
   assert.match(local, /PI_BIN=\/opt\/pi\/node_modules\/\.bin\/pi/);
   assert.match(local, /PERSISTENT_STORE=sqlite/);
   assert.match(local, /org\.opencontainers\.image\.pi-revision="\$\{PI_LOCAL_REV\}"/);
-  assert.match(local, /FROM node:22-slim/);
+  assert.match(local, /FROM node:22\.23\.5-trixie-slim/);
 });
 
 test("clean pi builds hydrate generated AI model data through the package build", () => {

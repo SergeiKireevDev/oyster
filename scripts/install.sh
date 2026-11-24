@@ -2,7 +2,6 @@
 # Install Oyster from this source checkout on a Debian/Ubuntu server.
 set -Eeuo pipefail
 
-readonly MIN_NODE_VERSION="22.19.0"
 readonly ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly SERVICE_NAME="oyster.service"
 
@@ -46,11 +45,6 @@ run_as_root() {
   fi
 }
 
-version_at_least() {
-  local current="$1" required="$2"
-  [[ "$(printf '%s\n%s\n' "$current" "$required" | sort -V | head -n 1)" == "$required" ]]
-}
-
 systemd_quote() {
   local value="$1"
   value="${value//\\/\\\\}"
@@ -89,7 +83,7 @@ fi
 
 if (( INSTALL_SYSTEM_PACKAGES )); then
   command -v apt-get >/dev/null 2>&1 \
-    || die "Automatic package installation supports Debian/Ubuntu (apt) only. Use --skip-system-packages after installing Git, curl, build-essential, Python 3, and Node.js >= $MIN_NODE_VERSION yourself."
+    || die "Automatic package installation supports Debian/Ubuntu (apt) only. Use --skip-system-packages after installing Git, curl, build-essential, Python 3, and a supported Node.js LTS runtime yourself."
 
   log "Installing server build dependencies"
   run_as_root apt-get update
@@ -97,14 +91,9 @@ if (( INSTALL_SYSTEM_PACKAGES )); then
     ca-certificates curl git build-essential python3 ffmpeg
 fi
 
-node_version=""
-if command -v node >/dev/null 2>&1; then
-  node_version="$(node --version | sed 's/^v//')"
-fi
-
-if [[ -z "$node_version" ]] || ! version_at_least "$node_version" "$MIN_NODE_VERSION"; then
+if ! command -v node >/dev/null 2>&1 || ! node "$ROOT_DIR/server/node-version.mjs"; then
   (( INSTALL_SYSTEM_PACKAGES )) \
-    || die "Node.js >= $MIN_NODE_VERSION is required (found ${node_version:-nothing})."
+    || die "Install a supported Node.js LTS runtime and retry."
 
   log "Installing Node.js 22"
   nodesource_setup="$(mktemp)"
@@ -116,9 +105,7 @@ if [[ -z "$node_version" ]] || ! version_at_least "$node_version" "$MIN_NODE_VER
   rm -f "$nodesource_setup"
   nodesource_setup=""
   hash -r
-  node_version="$(node --version | sed 's/^v//')"
-  version_at_least "$node_version" "$MIN_NODE_VERSION" \
-    || die "Node.js installation produced v$node_version; v$MIN_NODE_VERSION or newer is required."
+  node "$ROOT_DIR/server/node-version.mjs" || die "Installed Node.js does not meet the security baseline."
 fi
 
 command -v npm >/dev/null 2>&1 || die "npm is required but was not found."
