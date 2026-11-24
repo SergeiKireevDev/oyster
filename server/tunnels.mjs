@@ -24,7 +24,10 @@ import { randomBytes } from "node:crypto";
 import { readProcessIdentity, verifyPersistedProcessIdentity } from "./persistence/processIdentity.mjs";
 
 const URL_TIMEOUT_MS = 20_000;
-const PUBLIC_READY_TIMEOUT_MS = 60_000;
+// Probing before the trycloudflare.com record exists gets a NXDOMAIN that
+// resolvers cache for ~60s, so hold off the first probe and allow a long budget.
+const PUBLIC_READY_INITIAL_DELAY_MS = 8_000;
+const PUBLIC_READY_TIMEOUT_MS = 120_000;
 const PUBLIC_READY_INTERVAL_MS = 1_000;
 const PUBLIC_URL_RE = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i;
 
@@ -240,10 +243,12 @@ export async function publicHublotAnswers(url, {
 export async function waitForPublicHublot(url, {
   timeoutMs = PUBLIC_READY_TIMEOUT_MS,
   intervalMs = PUBLIC_READY_INTERVAL_MS,
+  initialDelayMs = PUBLIC_READY_INITIAL_DELAY_MS,
   check = publicHublotAnswers,
   clock = () => Date.now(),
   sleep = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
 } = {}) {
+  if (initialDelayMs > 0) await sleep(initialDelayMs);
   const deadline = clock() + timeoutMs;
   do {
     if (await check(url)) return true;
