@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 const RELOAD_DEBOUNCE_MS = 150;
 const TOKEN_BYTES = 16;
-const MIN_NODE_MINOR_VERSION = 19;
-const MIN_NODE_MAJOR_VERSION = 22;
+import { supportsNode, supportedNodeRange } from './node-version.mjs';
 const TOKEN_FILE_CREATE_ATTEMPTS = 3;
 const HTTP_INTERNAL_SERVER_ERROR = 500;
 const SHUTDOWN_CONFIRMATION_TIMEOUT_MS = 5000;
@@ -119,7 +118,6 @@ function defaultTunnelBin() {
 }
 
 const DEFAULT_LOCAL_PI = join(PROJECT_ROOT, "pi", "packages", "coding-agent", "dist", "cli.js");
-const MIN_NODE_VERSION = [MIN_NODE_MAJOR_VERSION, MIN_NODE_MINOR_VERSION, 0];
 
 function resolveExecutable(value) {
   if (value.includes("/") || value.includes("\\")) return resolve(value);
@@ -138,11 +136,6 @@ function detectExecutable(value) {
   const resolved = resolveExecutable(value);
   try { accessSync(resolved, constants.X_OK); return resolved; }
   catch { return null; }
-}
-
-function nodeVersionSupported(currentNode) {
-  return MIN_NODE_VERSION.every((part, index) =>
-    currentNode[index] === part || currentNode[index] > part || currentNode.slice(0, index).some((value, prior) => value > MIN_NODE_VERSION[prior]));
 }
 
 function validateConfiguredWorkdir(config) {
@@ -187,8 +180,8 @@ function validateEnum(value, allowed, label) {
 }
 
 function validateConfig(config) {
-  if (!nodeVersionSupported(process.versions.node.split(".").map(Number))) {
-    throw new Error(`oyster requires Node.js >= ${MIN_NODE_VERSION.join(".")} for its application database; current runtime is ${process.versions.node}`);
+  if (!supportsNode(process.versions.node)) {
+    throw new Error(`oyster requires Node.js ${supportedNodeRange}; current runtime is ${process.versions.node}`);
   }
   if (!Number.isInteger(config.PORT) || config.PORT < 0 || config.PORT > MAX_TCP_PORT) throw new Error("PORT/--port must be an integer from 0 to 65535");
   if (typeof config.HOST !== "string" || config.HOST.trim() === "") throw new Error("HOST/--host must not be empty");

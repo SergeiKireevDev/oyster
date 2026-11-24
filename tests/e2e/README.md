@@ -22,7 +22,7 @@ no network model calls, fully deterministic**.
 - Docker. Every scenario uses the `oyster:sqlite` image. The suite builds it
   automatically with `Dockerfile.local-pi` and the repository's `pi` submodule
   when it is missing (override the source with `PI_SOURCE_CONTEXT`).
-- Node ≥ 22.19 (the server always uses the built-in `node:sqlite` application store).
+- Node 22.23.5+ (22.x), 24.22.3+ (24.x), or 26.13.1+ (26.x) (the server always uses the built-in `node:sqlite` application store).
 
 The image bundles a mock LLM, so no host credentials or external model access
 are needed. `global-setup.js` starts each container with `E2E_MOCK_LLM=1`,

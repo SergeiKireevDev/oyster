@@ -13,7 +13,7 @@ For a substantial behavioral change, open an issue first so scope and design can
 
 ## Development setup
 
-Oyster requires Node.js 22.19 or newer.
+Oyster requires Node.js 22.23.5+ (22.x), 24.22.3+ (24.x), or 26.13.1+ (26.x).
 
 ```bash
 git submodule update --init --recursive

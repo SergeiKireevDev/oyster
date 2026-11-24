@@ -18,7 +18,7 @@
 # Build the exact pi source pinned by the repository's pi submodule. Packaging
 # its workspaces produces a self-contained runtime install while retaining the
 # SQLite storage package and its native dependency.
-FROM node:22-slim AS pi-builder
+FROM node:22.23.5-trixie-slim AS pi-builder
 WORKDIR /src
 COPY pi/package.json pi/package-lock.json pi/.npmrc pi/tsconfig.json pi/tsconfig.base.json pi/biome.json ./
 COPY pi/scripts ./scripts
@@ -48,7 +48,7 @@ RUN rm -rf packages/ai/src/providers/data \
     && npm init -y >/dev/null \
     && npm install --omit=dev --ignore-scripts /tarballs/*.tgz
 
-FROM node:22-slim
+FROM node:22.23.5-trixie-slim
 LABEL org.opencontainers.image.pi-source="git-submodule"
 
 # Tools the pi agent (and the UI's file explorer / routines) rely on
@@ -79,6 +79,7 @@ WORKDIR /app
 ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
 
 # Frontend build dependencies + app sources (see .dockerignore)
+COPY scripts/check-sqlite-install.cjs ./scripts/
 COPY package.json package-lock.json vite.config.js README.md AGENTS.md oyster.service Dockerfile Dockerfile.local-pi ./
 RUN npm ci
 COPY server ./server

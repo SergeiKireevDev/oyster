@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/SergeiKireevDev/oyster/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/SergeiKireevDev/oyster/actions/workflows/ci.yml/badge.svg?branch=main"></a>
-  <img alt="Node.js ≥ 22.19" src="https://img.shields.io/badge/Node.js-%E2%89%A522.19-5FA04E?logo=nodedotjs&logoColor=white">
+  <img alt="Node.js 22.23.5+ (22.x), 24.22.3+ (24.x), or 26.13.1+ (26.x)" src="https://img.shields.io/badge/Node.js-22.23.5%2B-5FA04E?logo=nodedotjs&logoColor=white">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-9DA9FF"></a>
 </p>
 

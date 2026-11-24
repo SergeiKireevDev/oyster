@@ -10,7 +10,7 @@ For the automated install, use a Debian or Ubuntu host, a non-root user with `su
 
 For a manual install, provide:
 
-- Node.js **22.19 or newer**
+- Node.js **22.23.5+ (22.x), 24.22.3+ (24.x), or 26.13.1+ (26.x)**
 - a built, executable pi coding agent CLI; the compatible source is bundled as a submodule
 - `cloudflared` only if you plan to create public hublots
 
