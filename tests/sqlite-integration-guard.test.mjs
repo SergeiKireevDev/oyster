@@ -82,7 +82,7 @@ test("SQLite mutations are isolated to the oyster persistence boundary", () => {
     .filter(({ text }) => /from\s+["']node:sqlite["']|new\s+DatabaseSync/.test(text))
     .map(({ name }) => name)
     .sort();
-  assert.deepEqual(sqliteConstructors, []);
+  assert.deepEqual(sqliteConstructors, ["server/sessions/sqliteCatalog.mjs"]);
 });
 
 test("only the app-store owner and read-only session catalog can construct SQLite connections", () => {
@@ -90,7 +90,7 @@ test("only the app-store owner and read-only session catalog can construct SQLit
     .filter(({ text }) => /(?:from\s+|import\s*\()\s*["']sqlite3["']/.test(text))
     .map(({ name }) => name)
     .sort();
-  assert.deepEqual(sqliteUsers, ["server/persistence/sqliteDatabase.mjs", "server/sessions/sqliteCatalog.mjs"]);
+  assert.deepEqual(sqliteUsers, ["server/persistence/sqliteDatabase.mjs"]);
 
   const appStoreImports = sources
     .filter(({ name }) => !["server/server.mjs", "scripts/migrate-app-data.mjs"].includes(name))
@@ -99,7 +99,9 @@ test("only the app-store owner and read-only session catalog can construct SQLit
   assert.deepEqual(appStoreImports, [], `only server.mjs or the stopped-service migration command may open the application store: ${appStoreImports.join(", ")}`);
 
   const catalog = sources.find(({ name }) => name === "server/sessions/sqliteCatalog.mjs").text;
-  assert.match(catalog, /new sqlite3\.Database\(path, sqlite3\.OPEN_READONLY/);
+  // sessions.sqlite is also opened in this process by pi's node:sqlite repository; a second SQLite
+  // library on the same file would cancel its POSIX locks and corrupt the WAL.
+  assert.match(catalog, /new DatabaseSync\(path, \{ readOnly: true/);
   assert.doesNotMatch(catalog, /\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|REPLACE\s+INTO|CREATE\s+TABLE|DROP\s+TABLE|ALTER\s+TABLE)\b/);
 });
 
