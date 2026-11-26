@@ -326,3 +326,33 @@ test("SQLite catalog reads committed WAL updates while another handle remains op
   assert.deepEqual((await catalog.list()).map((session) => session.id), ["two", "one"]);
   writer.close();
 });
+
+test("SQLite catalog reads never release a writer's lock held in the same process", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-sqlite-catalog-locks-"));
+  roots.push(root);
+  const path = join(root, "sessions.sqlite");
+  // Stands in for pi's repository, which the transcript sinks import into the server process.
+  const writer = new DatabaseSync(path);
+  writer.exec("PRAGMA journal_mode = WAL");
+  schema(writer);
+  const insert = writer.prepare("INSERT INTO sessions VALUES (?, ?, ?, NULL, NULL, NULL, ?, NULL, NULL)");
+  writer.exec("BEGIN IMMEDIATE");
+  insert.run("held", "2026-01-01", "/work", "2026-01-01");
+
+  assert.deepEqual(await createSqliteSessionCatalog({ databasePath: path }).list(), []);
+
+  // Another pi process must still find the database locked; otherwise it would commit into the
+  // write-ahead log underneath the open transaction and the two writers would overwrite each other.
+  const intruder = spawn(process.execPath, ["--no-warnings", "-e", `
+    const { DatabaseSync } = require("node:sqlite");
+    const database = new DatabaseSync(process.argv[1], { timeout: 0 });
+    try { database.exec("BEGIN IMMEDIATE; COMMIT"); console.log("acquired"); }
+    catch (error) { console.log(error.message); }
+  `, path], { stdio: ["ignore", "pipe", "inherit"] });
+  let output = "";
+  intruder.stdout.on("data", (chunk) => { output += chunk; });
+  await once(intruder, "close");
+  writer.exec("COMMIT");
+  writer.close();
+  assert.match(output, /database is locked/);
+});

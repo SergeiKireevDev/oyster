@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import sqlite3 from "sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { labelOf, transcriptMessage } from "./jsonlCatalog.mjs";
 import { aggregateUsageRecords } from "./usageAnalytics.mjs";
 import { rescoreSearchResults } from "./searchRescore.mjs";
@@ -64,16 +64,13 @@ function searchableParts(entry) {
     : [];
 }
 
-function openAsyncDatabase(path) {
-  return new Promise((resolvePromise, reject) => {
-    const database = new sqlite3.Database(path, sqlite3.OPEN_READONLY, (error) => {
-      if (error) reject(error);
-      else {
-        database.configure("busyTimeout", SQLITE_BUSY_TIMEOUT_MS);
-        resolvePromise(database);
-      }
-    });
-  });
+/* The catalog must read through node:sqlite, the library pi's session repository uses when the
+ * transcript sinks and session operations import it into this process. POSIX file locks belong to
+ * the process, and each SQLite library only tracks its own descriptors, so a second library closing
+ * its handle on sessions.sqlite would release the write lock the first one holds mid-transaction
+ * and let another pi process overwrite the WAL (https://sqlite.org/howtocorrupt.html#_multiple_copies_of_sqlite_linked_into_the_same_application). */
+function openReadOnlyDatabase(path) {
+  return new DatabaseSync(path, { readOnly: true, timeout: SQLITE_BUSY_TIMEOUT_MS });
 }
 
 function databaseGet(database, sql, ...params) {
@@ -113,7 +110,7 @@ function closeAsyncDatabase(database) {
 /** Read-only catalog for the coding-agent SQLite session database. */
 export function createSqliteSessionCatalog({
   databasePath,
-  databaseFactory = openAsyncDatabase,
+  databaseFactory = openReadOnlyDatabase,
 } = {}) {
   if (!databasePath) throw new Error("databasePath is required for the SQLite session catalog");
   const storagePath = resolve(databasePath);
