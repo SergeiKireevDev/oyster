@@ -265,3 +265,56 @@ test("on a touch keyboard Enter breaks the line and only the Send button sends",
   await uiActions.invoke(COMPOSER_SEND_ACTION);
   assert.ok(calls.some((call) => call[0] === "user" && call[1] === "first line"));
 });
+
+test("composer sends attachments with the message the user composed, never before", async () => {
+  const calls = [];
+  const input = {
+    value: "", selectionStart: 0, selectionEnd: 0, scrollHeight: 40, style: {},
+    addEventListener() {}, removeEventListener() {}, dispatchEvent() {}, focus() {},
+    setSelectionRange() {},
+  };
+  const uiActions = createUiActionRegistry();
+  const assembly = createComposerAssembly({
+    uiActions,
+    findElement: () => input,
+    setTextValue() {},
+    setBusy() {},
+    getBusy: () => false,
+    composerReadyForSend: () => true,
+    confirmKnownCommand: async () => true,
+    addUserMessage: (message) => calls.push(["user", message.content]),
+    addLocalEcho() {},
+    removeLocalEcho() {},
+    rpc: async (command) => { calls.push(["rpc", command.message]); },
+    schedulePostSendSync() {},
+    toast() {},
+    attachments: {
+      publish: (items) => calls.push(["attachments", items.map((item) => item.name)]),
+      chooseDestination: async () => "temporary",
+      createTempDir: async () => "/tmp/oyster-attachments/batch",
+      uploadChunk: async (options) => ({ res: { ok: true }, data: { saved: `${options.dir}/${options.name}` } }),
+      toast() {},
+    },
+  });
+
+  await uiActions.invoke("composer.attachFiles", [{ name: "shot.png", size: 3, slice: () => "png" }]);
+  assert.ok(!calls.some((call) => call[0] === "rpc"), "attaching alone must not send anything");
+
+  // The attachment stays with its session's draft while another session is open.
+  assembly.operations.switchDraft("one", "two");
+  assert.deepEqual(calls.at(-1), ["attachments", []]);
+  assembly.operations.switchDraft("two", "one");
+  assert.deepEqual(calls.at(-1), ["attachments", ["shot.png"]]);
+
+  input.value = "what is in this screenshot?";
+  await assembly.operations.send();
+  const expected = "what is in this screenshot?\n\nAttached file:\n- /tmp/oyster-attachments/batch/shot.png";
+  assert.deepEqual(calls.filter((call) => call[0] === "user" || call[0] === "rpc"), [["user", expected], ["rpc", expected]]);
+  assert.deepEqual(calls.at(-1)[0] === "attachments" ? calls.at(-1) : calls.findLast((call) => call[0] === "attachments"), ["attachments", []]);
+
+  await uiActions.invoke("composer.attachFiles", [{ name: "only.txt", size: 1, slice: () => "x" }]);
+  input.value = "";
+  await assembly.operations.send();
+  assert.deepEqual(calls.findLast((call) => call[0] === "rpc"), ["rpc", "Attached file:\n- /tmp/oyster-attachments/batch/only.txt"]);
+  assembly.teardown();
+});

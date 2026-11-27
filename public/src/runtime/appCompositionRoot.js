@@ -29,7 +29,7 @@ import { setCommandPaletteState, closeCommandPaletteState } from "../stores/comm
 import { fileExplorer, updateFileExplorer } from "../stores/fileExplorer.js";
 import { filePicker, updateFilePicker } from "../stores/filePicker.js";
 import { folderBrowser, updateFolderBrowser } from "../stores/folderBrowser.js";
-import { setComposerTextValue, setComposerVoiceState } from "../stores/composer.js";
+import { setComposerAttachments, setComposerTextValue, setComposerVoiceState } from "../stores/composer.js";
 import { updateHeaderState } from "../stores/header.js";
 import { hublotManager, updateHublotManager } from "../stores/hublotManager.js";
 import { pinnedWidgetGroups, pinnedWidgets, pinnedWidgetsError, pinnedWidgetsLoading, setPinnedWidgetCollection } from "../stores/pinnedWidgets.js";
@@ -54,7 +54,8 @@ import { createSettingsLayoutRuntime } from "../features/settings/createSettings
 import { createNewHarnessAuthenticationCheck } from "../lib/newHarnessAuthentication.js";
 import { CREDENTIALS_OPEN_ACTION } from "./uiActionNames.js";
 import { storeSnapshot } from "../lib/storeSnapshot.js";
-import { browseFiles, readFile, saveFile, uploadFileChunk } from "../lib/fileBrowserActions.js";
+import { browseFiles, createAttachmentDir, createFolder, readFile, saveFile, uploadFileChunk } from "../lib/fileBrowserActions.js";
+import { ATTACHMENT_PERMANENT, ATTACHMENT_TEMPORARY } from "../lib/composerAttachmentController.js";
 import { copyTextToClipboard } from "../lib/clipboardController.js";
 import { resetTranscriptItems } from "../stores/transcriptItems.js";
 import { clearTranscriptNotice, showTranscriptNotice } from "../stores/transcriptNotice.js";
@@ -139,6 +140,31 @@ const composerAssembly = createComposerAssembly({
   interceptSend: (text) => threadsAssembly.operations.interceptSend(text),
   enterBreaksLine: () => usesTouchKeyboard(window),
   toast: addToast,
+  attachments: {
+    publish: setComposerAttachments,
+    async chooseDestination(files) {
+      const title = files.length === 1 ? `Attach ${files[0].name}` : `Attach ${files.length} files`;
+      const choice = await dialogService.openOption(title, [
+        "Temporary — keep it in /tmp",
+        "Permanent — choose a folder…",
+      ]);
+      return [ATTACHMENT_TEMPORARY, ATTACHMENT_PERMANENT][choice] ?? null;
+    },
+    createTempDir: () => createAttachmentDir(fetch),
+    chooseFolder: (files) => chooseFolder({
+      title: files.length === 1 ? `Save ${files[0].name} to…` : `Save ${files.length} files to…`,
+      submitLabel: "Drop here",
+      startPath: getWorkdir(),
+    }),
+    listFileNames: async (dir) => (await browseFiles(fetch, dir)).files?.map((file) => file.name) ?? [],
+    confirmReplace: (dir, names) => dialogService.openConfirm(
+      names.length === 1 ? `Replace ${names[0]}?` : `Replace ${names.length} files?`,
+      `${names.join(", ")} already exist${names.length === 1 ? "s" : ""} in ${dir}. Attaching will overwrite ${names.length === 1 ? "it" : "them"}.`,
+    ),
+    uploadChunk: (options) => uploadFileChunk(fetch, options),
+    createUploadInput: dom.createFileInput,
+    toast: addToast,
+  },
 });
 const composerOperations = composerAssembly.operations;
 const rememberPrompt = composerOperations.rememberPrompt;
@@ -495,7 +521,7 @@ const resourceAssembly = createResourceAssembly({
   uiActions,
   files: {
   pickerState: () => ({ curDir: "", showHidden: true, onPick: composerOperations.insertText, onCancel: null, returnToHublot: false }),
-  folderState: () => ({ browsePath: "", showHidden: true, done: null, workspaceId: null, workspaceName: "" }),
+  folderState: () => ({ browsePath: "", showHidden: true, done: null, workspaceId: null, title: "" }),
   explorerState: () => ({ curPath: "", showHidden: true, editPath: "", editContent: "" }),
   picker: ({ state }) => ({
     browse: (path) => browseFiles(fetch, path),
@@ -530,7 +556,7 @@ const resourceAssembly = createResourceAssembly({
       return data;
     },
     update: updateFolderBrowser,
-    updateTitle: (title) => updateModal({ title: state.folder.workspaceName ? `New session in ${state.folder.workspaceName}` : title }),
+    updateTitle: (title) => updateModal({ title: state.folder.title || title }),
     getShowHidden: () => get(folderBrowser).showHidden,
     setPath: (path) => { state.folder.browsePath = path; },
     async openAndSwitchSession(...args) {
@@ -550,6 +576,7 @@ const resourceAssembly = createResourceAssembly({
     browse: (path) => browseFiles(fetch, path),
     readFile: (path) => readFile(fetch, path),
     saveFile: (options) => saveFile(fetch, options),
+    createFolder: (options) => createFolder(fetch, options),
     uploadChunk: (options) => uploadFileChunk(fetch, options),
     createUploadInput: dom.createFileInput,
     update: updateFileExplorer,
@@ -647,15 +674,16 @@ async function chooseNewSessionWorkspace() {
   return selected ?? false;
 }
 
-async function showFolderBrowser(requestedWorkspace = null, harness = null) {
-  const workspace = requestedWorkspace || await chooseNewSessionWorkspace();
-  if (workspace === false) return false;
+/** Open the folder browser on `startPath`; resolves to the chosen folder, or null when cancelled. */
+async function chooseFolder({ title, submitLabel, startPath = "", workspace = null }) {
+  // A browser that is still open belongs to an earlier request: settle it as cancelled.
+  settleFolderBrowser(null);
   Object.assign(folderBrowserState, {
-    browsePath: workspace ? "" : getWorkdir(),
+    browsePath: startPath,
     showHidden: true,
     done: null,
     workspaceId: workspace?.id ?? null,
-    workspaceName: workspace?.name || workspace?.id || "",
+    title,
   });
   const finished = new Promise((resolve) => { folderBrowserState.done = resolve; });
   updateFolderBrowser({
@@ -668,11 +696,22 @@ async function showFolderBrowser(requestedWorkspace = null, harness = null) {
     creating: false,
     createOpen: false,
     newName: "",
+    submitLabel,
   });
-  openModal({ title: workspace ? `New session in ${folderBrowserState.workspaceName}` : "New session in folder", content: "folderBrowser" });
-  await loadFolderBrowser(folderBrowserState.browsePath);
+  openModal({ title, content: "folderBrowser" });
+  await loadFolderBrowser(startPath);
+  return finished;
+}
 
-  const chosen = await finished;
+async function showFolderBrowser(requestedWorkspace = null, harness = null) {
+  const workspace = requestedWorkspace || await chooseNewSessionWorkspace();
+  if (workspace === false) return false;
+  const chosen = await chooseFolder({
+    title: workspace ? `New session in ${workspace.name || workspace.id}` : "New session in folder",
+    submitLabel: "Start session here",
+    startPath: workspace ? "" : getWorkdir(),
+    workspace,
+  });
   if (!chosen) return false;
   // Spawns a new runner in the selected workspace and folder; the current session keeps running.
   return folderBrowserController.createSessionInFolder(chosen, harness);
@@ -683,11 +722,17 @@ const createFolderBrowser = () => {
   return folderBrowserController.createFolder(folderBrowserState.browsePath, snapshot.newName ?? "");
 };
 
+function settleFolderBrowser(path) {
+  const done = folderBrowserState.done;
+  folderBrowserState.done = null;
+  done?.(path);
+}
+
 const folderBrowserActions = {
   browse: loadFolderBrowser,
   create: createFolderBrowser,
-  cancel: () => { closeModal(); folderBrowserState.done?.(null); },
-  submit: () => { closeModal(); folderBrowserState.done?.(folderBrowserState.browsePath); },
+  cancel: () => { closeModal(); settleFolderBrowser(null); },
+  submit: () => { closeModal(); settleFolderBrowser(folderBrowserState.browsePath); },
 };
 
 // ------------------------------------------------------------ tunnels
@@ -714,6 +759,7 @@ const fileExplorerActions = {
   edit: editExplorerFile,
   save: saveExplorerFile,
   upload: uploadExplorerFiles,
+  createFolder: (name) => fileExplorerController.createFolder(fileExplorerState.curPath, name),
   pin: (path) => pinArtifactPath(path),
   back: () => loadFileExplorer(fileExplorerState.curPath),
 };

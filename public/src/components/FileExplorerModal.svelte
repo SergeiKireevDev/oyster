@@ -15,6 +15,7 @@
   import {
     FILE_EXPLORER_BACK_ACTION,
     FILE_EXPLORER_BROWSE_ACTION,
+    FILE_EXPLORER_CREATE_FOLDER_ACTION,
     FILE_EXPLORER_EDIT_ACTION,
     FILE_EXPLORER_PIN_ACTION,
     FILE_EXPLORER_SAVE_ACTION,
@@ -29,6 +30,49 @@
   const uploadFileExplorer = () => uiActions.invoke(FILE_EXPLORER_UPLOAD_ACTION);
   const pinExploredPath = (path) => uiActions.invoke(FILE_EXPLORER_PIN_ACTION, path);
   const backFileExplorer = () => uiActions.invoke(FILE_EXPLORER_BACK_ACTION);
+
+  let newFolderOpen = false;
+  let newFolderName = "";
+  let newFolderError = "";
+  let creatingFolder = false;
+
+  function openNewFolderForm() {
+    newFolderOpen = true;
+    newFolderName = "";
+    newFolderError = "";
+  }
+
+  function closeNewFolderForm() {
+    newFolderOpen = false;
+  }
+
+  function updateNewFolderName(event) {
+    newFolderName = event.currentTarget.value;
+  }
+
+  async function submitNewFolder(event) {
+    event.preventDefault();
+    if (creatingFolder) return;
+    creatingFolder = true;
+    try {
+      newFolderError = await uiActions.invoke(FILE_EXPLORER_CREATE_FOLDER_ACTION, newFolderName) ?? "";
+      if (!newFolderError) newFolderOpen = false;
+    } finally {
+      creatingFolder = false;
+    }
+  }
+
+  function focusOnMount(node) {
+    let mounted = true;
+    queueMicrotask(() => {
+      if (mounted && node.isConnected) node.focus();
+    });
+    return {
+      destroy() {
+        mounted = false;
+      },
+    };
+  }
 
   function toggleHiddenFiles() {
     updateFileExplorer({ showHidden: !$fileExplorer.showHidden });
@@ -155,6 +199,31 @@
   </div>
 {/if}
 
+{#if $fileExplorer.mode === "list" && newFolderOpen}
+  <form class="newdir-row" aria-busy={creatingFolder} onsubmit={submitNewFolder}>
+    <label for="explorerNewFolderName">New folder in {$fileExplorer.path}</label>
+    <div class="newdir-controls">
+      <input
+        id="explorerNewFolderName"
+        type="text"
+        placeholder="Folder name"
+        value={newFolderName}
+        aria-invalid={newFolderError ? "true" : undefined}
+        aria-describedby={newFolderError ? "explorerNewFolderError" : undefined}
+        disabled={creatingFolder}
+        oninput={updateNewFolderName}
+        use:focusOnMount
+        required
+      />
+      <button class="btn" type="submit" disabled={creatingFolder}>{creatingFolder ? "Creating…" : "Create"}</button>
+      <button class="chip" type="button" disabled={creatingFolder} onclick={closeNewFolderForm}>Cancel</button>
+    </div>
+    {#if newFolderError}
+      <div id="explorerNewFolderError" class="newdir-error async-error" role="alert">{newFolderError} — edit the name and try again.</div>
+    {/if}
+  </form>
+{/if}
+
 {#if $fileExplorer.mode === "list" && !$fileExplorer.loading && !$fileExplorer.error && $fileExplorer.uploadError}
   <div class="m-path async-error" role="alert">{$fileExplorer.uploadError} — choose the file again to retry.</div>
 {/if}
@@ -169,12 +238,41 @@
       {#if $fileExplorer.uploading}<span class="spin" aria-hidden="true">⟳</span>{/if}
       {$fileExplorer.uploadText}
     </button>
+    <button class="chip" type="button" title={`create a folder in ${$fileExplorer.path}`} disabled={newFolderOpen || $fileExplorer.loading || Boolean($fileExplorer.error)} onclick={openNewFolderForm}>New folder</button>
     <button class="chip toggle-hidden" class:active={$fileExplorer.showHidden} type="button" aria-pressed={$fileExplorer.showHidden} onclick={toggleHiddenFiles}>{hiddenFilesLabel}</button>
   {/if}
   <button class="chip" type="button" data-modal-cancel onclick={closeModalState}>Close</button>
 </div>
 
 <style>
+  .newdir-row {
+    display: grid;
+    gap: 6px;
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .newdir-row label {
+    overflow-wrap: anywhere;
+  }
+
+  .newdir-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .newdir-controls input {
+    flex: 1;
+    min-width: 140px;
+  }
+
+  .newdir-error {
+    color: var(--red);
+    line-height: 1.45;
+  }
+
   .file-explorer-list,
   .file-editor-form,
   .file-editor-field {

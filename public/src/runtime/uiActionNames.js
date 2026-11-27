@@ -28,6 +28,7 @@ export const FILE_EXPLORER_BROWSE_ACTION = "fileExplorer.browse";
 export const FILE_EXPLORER_EDIT_ACTION = "fileExplorer.edit";
 export const FILE_EXPLORER_SAVE_ACTION = "fileExplorer.save";
 export const FILE_EXPLORER_UPLOAD_ACTION = "fileExplorer.upload";
+export const FILE_EXPLORER_CREATE_FOLDER_ACTION = "fileExplorer.createFolder";
 export const FILE_EXPLORER_PIN_ACTION = "fileExplorer.pin";
 export const FILE_EXPLORER_BACK_ACTION = "fileExplorer.back";
 export const FILE_EXPLORER_OPEN_ACTION = "fileExplorer.open";
@@ -61,6 +62,9 @@ export const COMPOSER_KEYDOWN_ACTION = "composer.keydown";
 export const COMPOSER_SEND_ACTION = "composer.send";
 export const COMPOSER_ABORT_ACTION = "composer.abort";
 export const COMPOSER_VOICE_ACTION = "composer.voice";
+export const COMPOSER_ATTACH_ACTION = "composer.attach";
+export const COMPOSER_ATTACH_FILES_ACTION = "composer.attachFiles";
+export const COMPOSER_ATTACHMENT_REMOVE_ACTION = "composer.removeAttachment";
 
 export const TRANSCRIPT_LOAD_EARLIER_ACTION = "transcript.loadEarlier";
 

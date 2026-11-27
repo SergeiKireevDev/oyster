@@ -1,5 +1,6 @@
 import { createCommandGuard } from "../../lib/commandActions.js";
 import { commandPalettePosition, commandPaletteView, commandTrigger, createCommandPaletteInputController, createCommandPaletteKeyboardController, moveCommandPaletteActive, pathPaletteView } from "../../lib/commandController.js";
+import { createComposerAttachmentController, messageWithAttachments } from "../../lib/composerAttachmentController.js";
 import { createComposerHistoryController } from "../../lib/composerHistoryController.js";
 import { pathCompletionIsExact, pathCompletionItems, pathCompletionRequest, pathTrigger } from "../../lib/pathAutocomplete.js";
 import { promptCommand } from "../../lib/promptActions.js";
@@ -10,6 +11,9 @@ import {
   ANALYTICS_LOAD_ACTION,
   COMMAND_PALETTE_RUN_ACTION,
   COMPOSER_ABORT_ACTION,
+  COMPOSER_ATTACH_ACTION,
+  COMPOSER_ATTACH_FILES_ACTION,
+  COMPOSER_ATTACHMENT_REMOVE_ACTION,
   COMPOSER_INPUT_ACTION,
   COMPOSER_PREFILL_ACTION,
   COMPOSER_KEYDOWN_ACTION,
@@ -22,6 +26,7 @@ import {
 export function createComposerAssembly(deps) {
   const input = deps.findElement("input");
   let commandRuntime = null;
+  const attachments = deps.attachments ? createComposerAttachmentController(deps.attachments) : null;
 
   function resizeInput() {
     input.style.height = "auto";
@@ -39,6 +44,7 @@ export function createComposerAssembly(deps) {
   }
 
   const drafts = new Map();
+  const attachmentDrafts = new Map();
   function switchDraft(previousSession, currentSession) {
     const previousKey = previousSession == null ? null : String(previousSession);
     const currentKey = currentSession == null ? null : String(currentSession);
@@ -46,6 +52,11 @@ export function createComposerAssembly(deps) {
     if (previousKey) {
       if (input.value) drafts.set(previousKey, input.value);
       else drafts.delete(previousKey);
+    }
+    if (attachments) {
+      const stashed = attachments.swap(currentKey ? attachmentDrafts.get(currentKey) : null);
+      if (currentKey) attachmentDrafts.delete(currentKey);
+      if (previousKey && stashed.length) attachmentDrafts.set(previousKey, stashed);
     }
     setText(currentKey ? drafts.get(currentKey) ?? "" : "");
     history.reset();
@@ -102,10 +113,13 @@ export function createComposerAssembly(deps) {
   const promptRpcCommand = (text) => promptCommand(text, deps.getBusy());
 
   async function send() {
-    const text = input.value.trim();
+    // An attachment still uploading has no path yet; the disabled Send button says so.
+    if (attachments?.isUploading()) return;
+    const text = messageWithAttachments(input.value, attachments?.paths());
     if (!text || !deps.composerReadyForSend()) return;
     const confirmKnownCommand = commandRuntime?.guard.confirmKnownCommand ?? deps.confirmKnownCommand ?? (async () => true);
     if (!await confirmKnownCommand(text)) return;
+    attachments?.clear();
     // A feature may claim the message (a drafted thread sends it as its question).
     if (deps.interceptSend?.(text)) {
       setText("");
@@ -158,6 +172,9 @@ export function createComposerAssembly(deps) {
     deps.uiActions.register(COMPOSER_SEND_ACTION, send),
     deps.uiActions.register(COMPOSER_ABORT_ACTION, abort),
     deps.uiActions.register(COMPOSER_VOICE_ACTION, voice.toggle),
+    deps.uiActions.register(COMPOSER_ATTACH_ACTION, () => attachments?.chooseFiles()),
+    deps.uiActions.register(COMPOSER_ATTACH_FILES_ACTION, (files) => attachments?.addFiles(files)),
+    deps.uiActions.register(COMPOSER_ATTACHMENT_REMOVE_ACTION, (id) => attachments?.remove(id)),
   ];
 
   function configureCommands(commandDeps) {
@@ -361,6 +378,8 @@ export function createComposerAssembly(deps) {
       voice.teardown();
       deps.setVoiceState?.({ available: false, listening: false, speaking: false });
       drafts.clear();
+      attachmentDrafts.clear();
+      attachments?.clear();
       history.clear();
     },
   };

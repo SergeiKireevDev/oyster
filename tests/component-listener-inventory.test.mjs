@@ -42,6 +42,7 @@ test("Svelte-managed document and element integrations stay on the approved list
     "components/AuthGate.svelte:use:blockingSurface={{ priority: 1000 }}",
     "components/CommandPalette.svelte:use:keepActiveVisible={cmd.active}",
     "components/CredentialsModal.svelte:use:trackOAuthInput",
+    "components/FileExplorerModal.svelte:use:focusOnMount",
     "components/FolderBrowserModal.svelte:use:focusOnMount",
     "components/HublotManagerModal.svelte:use:commandPalette",
     'components/HublotSidebar.svelte:<aside id="hublots" class="workspace-aux-sidebar" aria-label="Pinned widgets and routines" use:blockingSurface={{ drawer: true, media: "(max-width: 1200px)", onClose: closeDrawer }}>',

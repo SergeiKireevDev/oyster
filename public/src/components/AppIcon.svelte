@@ -9,7 +9,7 @@
 
   /**
    * @type {{
-   *   name: "analytics" | "key" | "settings" | "tour" | "logout" | "fork" | "sliders" | "model" | "thinking" | "more" | "file" | "download" | "copy" | "link";
+   *   name: "analytics" | "key" | "settings" | "tour" | "logout" | "fork" | "sliders" | "model" | "thinking" | "more" | "file" | "download" | "copy" | "link" | "attach" | "close";
    *   size?: number;
    *   class?: string;
    * }}
@@ -56,6 +56,10 @@
       <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
     {:else if name === "link"}
       <path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1" />
+    {:else if name === "attach"}
+      <path d="M20.5 11.5 12 20a5.3 5.3 0 0 1-7.5-7.5l8.8-8.8a3.5 3.5 0 0 1 5 5l-8.8 8.7a1.8 1.8 0 0 1-2.5-2.5l8-8" />
+    {:else if name === "close"}
+      <path d="M6 6l12 12M18 6 6 18" />
     {/if}
   </svg>
 </span>

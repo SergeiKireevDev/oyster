@@ -1,9 +1,11 @@
+import { createUploadChunking, uploadFileInChunks } from "./chunkedUpload.js";
+
 export function registerFileUploadInput(target, onChange) {
   target.addEventListener("change", onChange);
   return () => target.removeEventListener("change", onChange);
 }
 
-export function createFileExplorerController({ browse, readFile, saveFile, uploadChunk, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), createUploadInput, registerUploadInput = registerFileUploadInput, update, updateTitle, openModal, getShowHidden, getWorkdir, getToken, setPath, setEditFile, resetState, toast }) {
+export function createFileExplorerController({ browse, readFile, saveFile, createFolder: mkdir, uploadChunk, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), createUploadInput, registerUploadInput = registerFileUploadInput, update, updateTitle, openModal, getShowHidden, getWorkdir, getToken, setPath, setEditFile, resetState, toast }) {
   async function load(path) {
     update({ loading: true, mode: "list", error: "" });
     let data;
@@ -67,12 +69,7 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
 
   async function uploadFiles(dir, files) {
     update({ uploadError: "" });
-    // Stay below common reverse-proxy body limits. If an intermediary has a
-    // smaller limit, a 413 transparently halves subsequent chunks and retries
-    // the same offset instead of failing the whole file.
-    let chunkSize = 8 * 1024 * 1024;
-    const minChunkSize = 64 * 1024;
-    const maxRetries = 6;
+    const chunking = createUploadChunking();
     const totalBytes = files.reduce((sum, file) => sum + file.size, 0) || 1;
     let uploadedBytes = 0;
     const setProgress = () => update({ uploading: true, uploadText: `${Math.min(100, Math.round((uploadedBytes / totalBytes) * 100))}%` });
@@ -80,45 +77,14 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
     let done = 0;
     for (const file of files) {
       try {
-        let offset = 0;
-        let attempts = 0;
-        let finished = false;
-        while (!finished) {
-          const end = Math.min(offset + chunkSize, file.size);
-          const last = end >= file.size;
-          let response;
-          try { response = await uploadChunk({ dir, name: file.name, offset, last, body: file.slice(offset, end) }); }
-          catch {
-            if (++attempts > maxRetries) throw new Error(`connection lost (gave up after ${maxRetries} retries)`);
-            await sleep(1000 * attempts);
-            continue;
-          }
-          const { res, data } = response;
-          if (res.ok) {
-            attempts = 0;
-            if (last || data.saved) finished = true;
-            else offset = typeof data.received === "number" ? data.received : end;
-            uploadedBytes = files.slice(0, done).reduce((sum, item) => sum + item.size, 0) + (finished ? file.size : offset);
+        const completedBytes = files.slice(0, done).reduce((sum, item) => sum + item.size, 0);
+        await uploadFileInChunks({
+          uploadChunk, sleep, dir, file, chunking,
+          onProgress(fileBytes) {
+            uploadedBytes = completedBytes + fileBytes;
             setProgress();
-            continue;
-          }
-          if (res.status === 409 && typeof data.have === "number") {
-            if (++attempts > maxRetries) throw new Error(data.error || "upload out of sync");
-            offset = data.have;
-            continue;
-          }
-          if (res.status === 413 && chunkSize > minChunkSize) {
-            chunkSize = Math.max(minChunkSize, Math.floor(Math.min(chunkSize, end - offset) / 2));
-            attempts = 0;
-            continue;
-          }
-          if (res.status >= 500 || res.status === 429) {
-            if (++attempts > maxRetries) throw new Error(data.error || `upload failed (${res.status})`);
-            await sleep(1000 * attempts);
-            continue;
-          }
-          throw new Error(data.error || `upload failed (${res.status})`);
-        }
+          },
+        });
         done++;
       } catch (error) {
         const message = `${file.name}: ${error.message}`;
@@ -129,6 +95,22 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
     if (done) toast(`uploaded ${done} file${done > 1 ? "s" : ""} to ${dir}`);
     update({ uploading: false, uploadText: "⬆ Upload…" });
     await load(dir);
+  }
+
+  /** Create a folder in the listed directory; resolves to an error message, or "" on success. */
+  async function createFolder(path, name) {
+    const folderName = String(name ?? "").trim();
+    if (!folderName) return "Enter a folder name";
+    try {
+      await mkdir({ path, name: folderName });
+    } catch (error) {
+      const message = error.message || "mkdir failed";
+      toast(message, "error");
+      return message;
+    }
+    toast(`created ${folderName}`);
+    await load(path);
+    return "";
   }
 
   async function saveEditor(path, content) {
@@ -144,5 +126,5 @@ export function createFileExplorerController({ browse, readFile, saveFile, uploa
     }
   }
 
-  return { load, show, openEditor, chooseFiles, uploadFiles, saveEditor };
+  return { load, show, openEditor, chooseFiles, uploadFiles, createFolder, saveEditor };
 }

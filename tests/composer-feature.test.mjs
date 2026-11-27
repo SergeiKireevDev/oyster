@@ -15,7 +15,7 @@ test("composer component routes input, keydown, send, and abort through scoped a
 });
 
 test("composer exposes named message, voice, and stop controls", () => {
-  assert.match(source, /<form class="inner" onsubmit=\{handleSubmit\} aria-label="Message composer">/);
+  assert.match(source, /<form class="inner"[^>]* onsubmit=\{handleSubmit\}[^>]* aria-label="Message composer">/);
   // The key hint follows the keyboard: a return key on touch keyboards, send elsewhere.
   assert.match(source, /id="input"[\s\S]*?enterkeyhint=\{enterKeyHint\}/);
   assert.match(source, /const enterKeyHint = usesTouchKeyboard\(\) \? "enter" : "send";/);
