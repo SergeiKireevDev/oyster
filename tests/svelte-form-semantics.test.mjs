@@ -29,7 +29,7 @@ test("single-field workflows use native form submission instead of Enter key han
 
 test("message, widget, and routine entry expose labels and native submit controls", () => {
   const composer = component("Composer.svelte");
-  assert.match(composer, /<form class="inner" onsubmit=/);
+  assert.match(composer, /<form class="inner"[^>]* onsubmit=/);
   assert.match(composer, /id="input"\s+aria-label="Message"/);
   assert.match(composer, /id="sendBtn" type="submit"/);
 

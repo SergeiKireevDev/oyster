@@ -123,7 +123,7 @@
 
 <div class="m-actions" id="mActions">
   <button class="chip" type="button" data-modal-cancel onclick={cancelFolderBrowser}>Cancel</button>
-  <button class="btn modal-primary-action start-session-action" type="button" disabled={!canSubmitFolder} onclick={submitFolderBrowser}>Start session here</button>
+  <button class="btn modal-primary-action start-session-action" type="button" disabled={!canSubmitFolder} onclick={submitFolderBrowser}>{$folderBrowser.submitLabel}</button>
 </div>
 
 <style>

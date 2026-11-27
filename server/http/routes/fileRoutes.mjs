@@ -1,4 +1,4 @@
-import { appendFileSync, closeSync, constants, createReadStream, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, constants, createReadStream, existsSync, fstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -23,6 +23,8 @@ const STALE_UPLOAD_AGE_MS = STALE_UPLOAD_AGE_HOURS * SECONDS_PER_MINUTE * SECOND
 const MAX_EDITABLE_FILE_SIZE = 2 * BYTES_PER_KIBIBYTE * BYTES_PER_KIBIBYTE;
 const UPLOAD_PREFIX = ".oyster-upload-";
 const UPLOAD_SUFFIX = ".part";
+const ATTACHMENT_DIR_NAME = "oyster-attachments";
+const PRIVATE_DIR_MODE = 0o700;
 
 function cleanupStaleUploads(dir, now = Date.now()) {
   let entries;
@@ -111,7 +113,7 @@ function applyUploadChunk({ tmp, target, offset, buf, last }) {
 }
 
 /** Build confined file-browser routes. */
-export function createFileRoutes({ state, requestContext, logger = console } = {}) {
+export function createFileRoutes({ state, requestContext, logger = console, tempRoot = "/tmp" } = {}) {
   if (!state || typeof state.currentDir !== "string") throw new TypeError("state.currentDir is required");
   if (!requestContext || typeof requestContext.json !== "function"
     || typeof requestContext.readJsonBody !== "function"
@@ -276,6 +278,22 @@ export function createFileRoutes({ state, requestContext, logger = console } = {
       const uploadResponse = applyUploadChunk({ tmp: uploadTempPath(upload.dir, upload.name, upload.offset), target, offset: upload.offset, buf: chunk.buf, last: upload.last });
       if (uploadResponse) { json(res, uploadResponse.status, uploadResponse.body); return; }
       sendUploadSuccess({ res, target, offset: upload.offset, buf: chunk.buf, last: upload.last });
+    },
+
+    // Temporary composer attachments get a private, unguessable directory per
+    // batch so equally named files (pasted "image.png") never overwrite each other.
+    "POST /attachment-dir": (_req, res) => {
+      const base = resolveSafePath(resolve(tempRoot, ATTACHMENT_DIR_NAME));
+      if (!base) { forbidden(res, join(tempRoot, ATTACHMENT_DIR_NAME)); return; }
+      let path;
+      try {
+        mkdirSync(base, { recursive: true, mode: PRIVATE_DIR_MODE });
+        path = mkdtempSync(join(base, `${new Date().toISOString().slice(0, 10)}-`));
+      } catch (error) {
+        json(res, HTTP_INTERNAL_SERVER_ERROR, { error: `cannot create a temporary attachment folder: ${error.message}` });
+        return;
+      }
+      json(res, HTTP_CREATED, { path });
     },
 
     "POST /mkdir": async (req, res) => {

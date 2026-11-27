@@ -27,9 +27,24 @@ export async function uploadFileChunk(fetchImpl, { dir, name, offset, last, body
   return { res, data: await res.json().catch(() => ({})) };
 }
 
+export async function createFolder(fetchImpl, { path, name }) {
+  const res = await fetchImpl("/mkdir", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, name }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `mkdir failed (${res.status})`);
+  return data;
+}
+
 export async function saveFile(fetchImpl, { path, content }) {
   const res = await fetchImpl("/file-save", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, content }) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `save failed (${res.status})`);
   return data;
+}
+
+/** Create a private, per-batch folder under /tmp for temporary composer attachments. */
+export async function createAttachmentDir(fetchImpl) {
+  const res = await fetchImpl("/attachment-dir", { method: "POST" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || typeof data.path !== "string") throw new Error(data.error || `cannot create a temporary folder (${res.status})`);
+  return data.path;
 }

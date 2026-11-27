@@ -31,3 +31,13 @@ test("composer keeps drafting enabled during transient reconnects and transcript
   const ready = composerUiState({ connected: true, replayingTranscript: false }, "");
   assert.equal(ready.placeholder, "Message Agent");
 });
+
+test("attachments alone are sendable, and uploads hold the send button back", () => {
+  const session = { connected: true, replayingTranscript: false, busy: true };
+  assert.equal(composerUiState(session, "").sendHidden, true);
+  const ready = composerUiState(session, "", [{ uploading: false }]);
+  assert.equal(ready.sendHidden, false);
+  assert.equal(ready.sendDisabled, false);
+  const uploading = composerUiState(session, "draft", [{ uploading: true }]);
+  assert.equal(uploading.sendDisabled, true);
+});

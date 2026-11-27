@@ -207,3 +207,28 @@ test("mkdir validates names, conflicts, and creates only beneath an allowed pare
   assert.equal(created.status, 201);
   assert.equal(existsSync(join(root, "created")), true);
 });
+
+test("attachment-dir creates a private, unique folder per batch under the temporary root", async (t) => {
+  const { root } = await setup(t);
+  const state = { config: { TOKEN: "x", PI_DIR: root, DIRNAME: root }, currentDir: root };
+  const routes = createFileRoutes({ state, requestContext: createRequestContext(state), logger: { log() {} }, tempRoot: root });
+  const first = res();
+  const second = res();
+  await routes["POST /attachment-dir"]({}, first);
+  await routes["POST /attachment-dir"]({}, second);
+  assert.equal(first.status, 201);
+  assert.equal(second.status, 201);
+  assert.notEqual(first.body.path, second.body.path);
+  assert.ok(first.body.path.startsWith(join(root, "oyster-attachments") + "/"));
+  assert.equal((await stat(first.body.path)).mode & 0o777, 0o700);
+  assert.equal((await stat(join(root, "oyster-attachments"))).mode & 0o077, 0);
+
+  const uploaded = res();
+  await routes["POST /file-upload"](req("png"), uploaded, new URL(`http://localhost/file-upload?dir=${encodeURIComponent(first.body.path)}&name=image.png&offset=0&last=1`));
+  assert.deepEqual(uploaded.body, { saved: join(first.body.path, "image.png"), bytes: 3 });
+
+  const outside = createFileRoutes({ state, requestContext: createRequestContext(state), logger: { log() {} }, tempRoot: "/etc" });
+  const refused = res();
+  await outside["POST /attachment-dir"]({}, refused);
+  assert.equal(refused.status, 403);
+});

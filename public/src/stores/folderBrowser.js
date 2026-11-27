@@ -12,6 +12,7 @@ export const folderBrowser = writable({
   newName: "",
   error: "",
   createError: "",
+  submitLabel: "Start session here",
 });
 
 export function updateFolderBrowser(patch) {

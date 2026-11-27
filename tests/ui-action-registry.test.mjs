@@ -16,6 +16,7 @@ const resourceActionNames = [
   "fileExplorer.edit",
   "fileExplorer.save",
   "fileExplorer.upload",
+  "fileExplorer.createFolder",
   "fileExplorer.pin",
   "fileExplorer.back",
   "fileExplorer.open",

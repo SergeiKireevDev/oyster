@@ -3,7 +3,7 @@
   import FolderIcon from "./FolderIcon.svelte";
   import AppIcon from "./AppIcon.svelte";
   import { appHeader } from "../stores/appSession.js";
-  import { composerText, composerUi, composerVoice } from "../stores/composer.js";
+  import { composerAttachments, composerText, composerUi, composerVoice } from "../stores/composer.js";
   import { headerState } from "../stores/header.js";
   import { threadDraft, threadView } from "../stores/threads.js";
   import { composerHighlightSegments } from "../lib/composerHighlight.js";
@@ -12,6 +12,9 @@
   import { getUiActionRegistry } from "../runtime/uiActionContext.js";
   import {
     COMPOSER_ABORT_ACTION,
+    COMPOSER_ATTACH_ACTION,
+    COMPOSER_ATTACH_FILES_ACTION,
+    COMPOSER_ATTACHMENT_REMOVE_ACTION,
     COMPOSER_INPUT_ACTION,
     COMPOSER_KEYDOWN_ACTION,
     COMPOSER_SEND_ACTION,
@@ -24,6 +27,7 @@
   const enterKeyHint = usesTouchKeyboard() ? "enter" : "send";
   let highlight;
   let aborting = false;
+  let dropTarget = false;
   const highlightScroll = createFrameScheduler((top, left) => {
     if (!highlight) return;
     highlight.scrollTop = top;
@@ -63,6 +67,49 @@
 
   function toggleVoice() {
     uiActions.invoke(COMPOSER_VOICE_ACTION);
+  }
+
+  function chooseAttachments() {
+    uiActions.invoke(COMPOSER_ATTACH_ACTION);
+  }
+
+  function removeAttachment(id) {
+    uiActions.invoke(COMPOSER_ATTACHMENT_REMOVE_ACTION, id);
+  }
+
+  function carriesFiles(transfer) {
+    return [...(transfer?.types ?? [])].includes("Files");
+  }
+
+  // Pasted or dropped files become attachments; plain text keeps its default handling.
+  function handlePaste(event) {
+    const files = [...(event.clipboardData?.files ?? [])];
+    if (!files.length) return;
+    event.preventDefault();
+    uiActions.invoke(COMPOSER_ATTACH_FILES_ACTION, files);
+  }
+
+  function handleDragOver(event) {
+    if (!carriesFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    dropTarget = true;
+  }
+
+  function handleDragLeave() {
+    dropTarget = false;
+  }
+
+  function handleDrop(event) {
+    dropTarget = false;
+    const files = [...(event.dataTransfer?.files ?? [])];
+    if (!files.length) return;
+    event.preventDefault();
+    uiActions.invoke(COMPOSER_ATTACH_FILES_ACTION, files);
+  }
+
+  function attachmentTitle(attachment) {
+    if (attachment.uploading) return `Uploading ${attachment.name} (${attachment.progress}%)`;
+    return `${attachment.path} — ${attachment.temporary ? "temporary" : "saved in the workspace"}; sent with your message`;
   }
 
   function openThreadTree() {
@@ -109,7 +156,25 @@
 </script>
 
 <div id="composer">
-  <form class="inner" onsubmit={handleSubmit} aria-label="Message composer">
+  <form class="inner" class:drop-target={dropTarget} onsubmit={handleSubmit} ondragover={handleDragOver} ondragleave={handleDragLeave} ondrop={handleDrop} aria-label="Message composer">
+    {#if $composerAttachments.length}
+      <ul class="attachments" id="composerAttachments" aria-label="Attachments">
+        {#each $composerAttachments as attachment (attachment.id)}
+          <li class="attachment" class:uploading={attachment.uploading} title={attachmentTitle(attachment)}>
+            {#if attachment.uploading}
+              <span class="attachment-progress" role="status">{attachment.progress}%</span>
+            {:else}
+              <AppIcon name="file" size={14} />
+            {/if}
+            <span class="attachment-name">{attachment.name}</span>
+            <span class="attachment-kind">{attachment.temporary ? "tmp" : "saved"}</span>
+            <button class="attachment-remove" type="button" aria-label={`Remove attachment ${attachment.name}`} onclick={() => removeAttachment(attachment.id)}>
+              <AppIcon name="close" size={12} />
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
     <div class="composer-prompt" aria-hidden="true">›</div>
     <div class="composer-editor" class:input-disabled={$composerUi.inputDisabled}>
       <pre class="composer-highlight" aria-hidden="true" bind:this={highlight}>{#each highlightSegments as segment, index (highlightSegmentKey(segment, index))}<span class:code={segment.type === "code"} class:fence={segment.type === "fence"}>{segment.text}</span>{/each}</pre>
@@ -123,8 +188,12 @@
         oninput={handleInput}
         onscroll={handleScroll}
         onkeydown={handleKeydown}
+        onpaste={handlePaste}
       ></textarea>
     </div>
+    <button class="attach-btn" id="attachBtn" type="button" aria-label="Attach files" title="Attach files" onclick={chooseAttachments}>
+      <AppIcon name="attach" size={20} />
+    </button>
     {#if threadCount}
       <button class="thread-tree-btn" id="threadTreeBtn" type="button" aria-label={threadTreeLabel} title={threadTreeLabel} onclick={openThreadTree}>
         <AppIcon name="fork" size={19} />
@@ -196,6 +265,111 @@
   .inner:focus-within {
     border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
     box-shadow: 0 16px 42px color-mix(in srgb, var(--bg) 72%, transparent), 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+
+  .inner {
+    flex-wrap: wrap;
+  }
+
+  .inner.drop-target {
+    border-color: var(--accent);
+    border-style: dashed;
+  }
+
+  /* Pending attachments take their own row above the field. */
+  .attachments {
+    display: flex;
+    flex: 0 0 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+    padding: 3px 0 1px;
+    list-style: none;
+  }
+
+  .attachment {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    min-width: 0;
+    padding: 2px 3px 2px 9px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text) 5%, transparent);
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .attachment.uploading {
+    border-style: dashed;
+    color: var(--muted);
+  }
+
+  .attachment-name {
+    min-width: 0;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .attachment-kind,
+  .attachment-progress {
+    flex: none;
+    color: var(--muted);
+    font: 500 10px/1.4 var(--mono);
+  }
+
+  .attachment-progress {
+    color: var(--accent);
+  }
+
+  .attachment-remove {
+    display: grid;
+    width: 24px;
+    height: 24px;
+    flex: none;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  .attachment-remove:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  .attachment-remove:focus-visible,
+  .attach-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .attach-btn {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    flex: none;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color .15s, background .15s;
+  }
+
+  .attach-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text);
   }
 
   .composer-prompt {

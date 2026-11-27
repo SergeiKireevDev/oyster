@@ -269,3 +269,19 @@ test("file explorer retries its workdir after another folder cannot load", async
     ["browse", "/work"],
   ]);
 });
+
+test("file explorer creates a folder in the listed directory and reloads it", async () => {
+  const calls = [];
+  const controller = createFileExplorerController({
+    createFolder: async (options) => { calls.push(["mkdir", options]); if (options.name === "taken") throw new Error("already exists: /work/taken"); return { path: `/work/${options.name}` }; },
+    browse: async (path) => { calls.push(["browse", path]); return { path, home: "/home", workdir: "/work", parent: "/", dirs: [], files: [] }; },
+    update() {}, updateTitle() {}, setPath() {},
+    getShowHidden: () => true, getWorkdir: () => "/work", getToken: () => "token",
+    toast: (...args) => calls.push(["toast", ...args]),
+  });
+
+  assert.equal(await controller.createFolder("/work", " assets "), "");
+  assert.deepEqual(calls, [["mkdir", { path: "/work", name: "assets" }], ["toast", "created assets"], ["browse", "/work"]]);
+  assert.equal(await controller.createFolder("/work", "taken"), "already exists: /work/taken");
+  assert.equal(await controller.createFolder("/work", "  "), "Enter a folder name");
+});
